@@ -266,20 +266,26 @@ pub fn load_sessions(summarizer: &dyn Summarizer) -> Result<Vec<Session>> {
             .then(|| process_path(f.pid).as_deref().and_then(origin_from_path))
             .flatten();
 
+        // The session file records only the launch dir; the transcript tracks the
+        // session's live cwd, which follows `cd`s into a worktree. Prefer the latter
+        // so the path and worktree match where the session actually is.
+        let cwd = analysis.cwd.clone().unwrap_or_else(|| f.cwd.clone());
+
         let name = f.name.clone().unwrap_or_else(|| {
-            f.cwd
-                .rsplit('/')
+            cwd.rsplit('/')
                 .next()
                 .filter(|s| !s.is_empty())
                 .unwrap_or("session")
                 .to_string()
         });
 
+        let worktree = worktree_name(&cwd);
+
         let mut session = Session {
             source,
             state,
             name,
-            cwd: f.cwd.clone(),
+            cwd,
             waiting_for: f.waiting_for.clone(),
             total_tokens: analysis.total_tokens,
             context_tokens: analysis.context_tokens,
@@ -291,7 +297,7 @@ pub fn load_sessions(summarizer: &dyn Summarizer) -> Result<Vec<Session>> {
             origin,
             model: analysis.model.clone(),
             git_branch: analysis.git_branch.clone(),
-            worktree: worktree_name(&f.cwd),
+            worktree,
             pr_number: analysis.pr_number,
             pr_url: analysis.pr_url.clone(),
             active_span_ms: analysis.active_span_ms,

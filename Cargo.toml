@@ -1,6 +1,6 @@
 [package]
 name = "tend"
-version = "0.2.2"
+version = "0.2.3"
 edition = "2021"
 description = "A small TUI that keeps your Claude Code sessions in view: which are working, which need you, which are done."
 

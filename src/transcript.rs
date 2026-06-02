@@ -22,6 +22,9 @@ pub struct Analysis {
     pub model: Option<String>,
     /// Git branch the session is working on (skips detached "HEAD").
     pub git_branch: Option<String>,
+    /// Latest working directory recorded in the transcript. Tracks `cd`s the session
+    /// makes (e.g. into a worktree), unlike the launch-time cwd in the session file.
+    pub cwd: Option<String>,
     /// Most recent PR opened during the session, if any.
     pub pr_number: Option<u64>,
     pub pr_url: Option<String>,
@@ -166,6 +169,14 @@ fn analyze_str(text: &str) -> Analysis {
             }
         }
 
+        // Track the live cwd: the session file only records the launch dir, but a
+        // session can `cd` into a worktree, which we want to reflect (last wins).
+        if let Some(c) = v.get("cwd").and_then(Value::as_str) {
+            if !c.is_empty() {
+                a.cwd = Some(c.to_string());
+            }
+        }
+
         // A PR opened during the session.
         if let Some(url) = v.get("prUrl").and_then(Value::as_str) {
             a.pr_url = Some(url.to_string());
@@ -235,6 +246,18 @@ mod tests {
         assert_eq!(a.tool_calls, 4);
         assert_eq!(a.web_requests, 2);
         assert_eq!(a.integrations, vec!["Notion".to_string()]);
+    }
+
+    #[test]
+    fn tracks_latest_cwd_across_lines() {
+        let jsonl = [
+            r#"{"type":"user","cwd":"/repo/claims","gitBranch":"main","message":{"content":"hi"}}"#,
+            r#"{"type":"user","cwd":"/repo/.worktrees/CO-5100","gitBranch":"CO-5100","message":{"content":"go"}}"#,
+        ]
+        .join("\n");
+        let a = analyze_str(&jsonl);
+        assert_eq!(a.cwd.as_deref(), Some("/repo/.worktrees/CO-5100"));
+        assert_eq!(a.git_branch.as_deref(), Some("CO-5100"));
     }
 
     #[test]
