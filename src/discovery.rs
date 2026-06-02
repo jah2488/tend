@@ -122,26 +122,27 @@ fn origin_from_path(path: &str) -> Option<String> {
 ///
 /// A linked worktree's `.git` is a *file* like `gitdir: /repo/.git/worktrees/<name>`;
 /// the main checkout's `.git` is a directory (so `read_to_string` fails → None).
+/// Name of the linked git worktree the cwd lives in, or None for the main checkout or a
+/// non-repo. Derived straight from git, so it's correct no matter where the worktree
+/// sits on disk — including layouts where worktrees are separated from the main checkout
+/// (e.g. `repo/.worktrees/<name>` alongside `repo/main`) — and from any subdirectory.
 fn worktree_name(cwd: &str) -> Option<String> {
-    // Walk up like git does: the cwd may be a subdir of the worktree root, where the
-    // `.git` entry lives. First `.git` we hit wins — a file means a linked worktree,
-    // a directory means the main checkout (so: not a worktree).
-    for dir in std::path::Path::new(cwd).ancestors() {
-        let dotgit = dir.join(".git");
-        match std::fs::read_to_string(&dotgit) {
-            Ok(content) => return parse_worktree_gitdir(&content),
-            Err(_) if dotgit.is_dir() => return None,
-            Err(_) => continue,
-        }
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(cwd)
+        .args(["rev-parse", "--absolute-git-dir"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
     }
-    None
+    worktree_from_git_dir(String::from_utf8_lossy(&out.stdout).trim())
 }
 
-/// Pull "<name>" out of a worktree `.git` file body (`gitdir: …/worktrees/<name>`).
-/// Returns None for submodules (`…/modules/…`) or anything without a worktree path.
-fn parse_worktree_gitdir(content: &str) -> Option<String> {
-    let gitdir = content.strip_prefix("gitdir:")?.trim();
-    let name = gitdir.split("/worktrees/").nth(1)?.split('/').next()?;
+/// A linked worktree's git dir is `<main>/.git/worktrees/<name>`; the main checkout's is
+/// just `<main>/.git`. Pull `<name>` out, or None when the path isn't a worktree's.
+fn worktree_from_git_dir(git_dir: &str) -> Option<String> {
+    let name = git_dir.split("/worktrees/").nth(1)?.split('/').next()?;
     (!name.is_empty()).then(|| name.to_string())
 }
 
@@ -315,20 +316,22 @@ pub fn load_sessions(summarizer: &dyn Summarizer) -> Result<Vec<Session>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{parse_worktree_gitdir, worktree_name};
+    use super::{worktree_from_git_dir, worktree_name};
+    use std::path::Path;
+    use std::process::Command;
 
     #[test]
-    fn extracts_worktree_name() {
+    fn extracts_worktree_name_from_git_dir() {
         assert_eq!(
-            parse_worktree_gitdir("gitdir: /Users/me/repo/.git/worktrees/feature-x\n"),
+            worktree_from_git_dir("/Users/me/repo/.git/worktrees/feature-x"),
             Some("feature-x".to_string())
         );
     }
 
     #[test]
-    fn ignores_submodules_and_garbage() {
-        assert_eq!(parse_worktree_gitdir("gitdir: /Users/me/repo/.git/modules/sub\n"), None);
-        assert_eq!(parse_worktree_gitdir("not a gitdir file"), None);
+    fn main_checkout_and_submodules_are_not_worktrees() {
+        assert_eq!(worktree_from_git_dir("/Users/me/repo/.git"), None); // main checkout
+        assert_eq!(worktree_from_git_dir("/Users/me/repo/.git/modules/sub"), None); // submodule
     }
 
     /// Unique scratch dir for one test, removed on drop.
@@ -336,6 +339,7 @@ mod tests {
     impl TmpDir {
         fn new(tag: &str) -> Self {
             let p = std::env::temp_dir().join(format!("tend-test-{}-{}", tag, std::process::id()));
+            let _ = std::fs::remove_dir_all(&p);
             std::fs::create_dir_all(&p).unwrap();
             TmpDir(p)
         }
@@ -346,22 +350,37 @@ mod tests {
         }
     }
 
-    #[test]
-    fn detects_worktree_from_a_subdir() {
-        let tmp = TmpDir::new("wt");
-        std::fs::write(tmp.0.join(".git"), "gitdir: /repo/.git/worktrees/my-wt\n").unwrap();
-        let sub = tmp.0.join("src/inner");
-        std::fs::create_dir_all(&sub).unwrap();
-        // cwd is two levels below the worktree root — we must walk up to find `.git`.
-        assert_eq!(worktree_name(sub.to_str().unwrap()), Some("my-wt".to_string()));
+    fn git(dir: &Path, args: &[&str]) {
+        let ok = Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            // self-contained identity so the test doesn't depend on global git config
+            .args(["-c", "user.email=t@t", "-c", "user.name=t"])
+            .args(args)
+            .output()
+            .expect("git runs")
+            .status
+            .success();
+        assert!(ok, "git {args:?} failed");
     }
 
+    // Reproduces Matt's layout: worktrees in `repo/.worktrees/<name>`, separated from the
+    // main checkout `repo/claims`. Detection must work from the worktree and its subdirs.
     #[test]
-    fn main_checkout_is_not_a_worktree() {
-        let tmp = TmpDir::new("main");
-        std::fs::create_dir_all(tmp.0.join(".git")).unwrap(); // `.git` as a directory
-        let sub = tmp.0.join("src");
+    fn detects_separated_worktree_via_git() {
+        let tmp = TmpDir::new("sepwt");
+        let main = tmp.0.join("claims");
+        let wt = tmp.0.join(".worktrees/CO-5100-canonical-lookup-tuples");
+        std::fs::create_dir_all(&main).unwrap();
+        git(&main, &["init", "-q"]);
+        git(&main, &["commit", "-q", "--allow-empty", "-m", "init"]);
+        git(&main, &["worktree", "add", "-q", wt.to_str().unwrap(), "-b", "CO-5100"]);
+
+        let name = Some("CO-5100-canonical-lookup-tuples".to_string());
+        assert_eq!(worktree_name(wt.to_str().unwrap()), name); // from worktree root
+        let sub = wt.join("src/inner");
         std::fs::create_dir_all(&sub).unwrap();
-        assert_eq!(worktree_name(sub.to_str().unwrap()), None);
+        assert_eq!(worktree_name(sub.to_str().unwrap()), name); // from a nested subdir
+        assert_eq!(worktree_name(main.to_str().unwrap()), None); // main checkout: no marker
     }
 }
