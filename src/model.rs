@@ -104,6 +104,8 @@ pub struct Session {
     pub model: Option<String>,
     /// Git branch the session is working on.
     pub git_branch: Option<String>,
+    /// Linked git worktree name, when the cwd is a worktree (not the main checkout).
+    pub worktree: Option<String>,
     /// Most recent PR opened during the session.
     pub pr_number: Option<u64>,
     pub pr_url: Option<String>,

@@ -25,6 +25,11 @@ fn f_cwd(s: &Session) -> String {
 fn f_branch(s: &Session) -> String {
     s.git_branch.as_ref().map_or(String::new(), |b| format!("\u{2387} {}", b))
 }
+fn f_worktree(s: &Session) -> String {
+    // ⑂ (a fork glyph, width-1) marks a linked worktree so sibling sessions in the same
+    // repo stay distinct — same monochrome style as the ⎇ branch marker.
+    s.worktree.as_ref().map_or(String::new(), |w| format!("\u{2442} {}", w))
+}
 fn f_model(s: &Session) -> String {
     s.model.as_deref().map(short_model).unwrap_or_default()
 }
@@ -49,6 +54,7 @@ struct CompactCols {
     badge: usize,
     cwd: usize,
     branch: usize,
+    worktree: usize,
     model: usize,
     tokens: usize,
     age: usize,
@@ -63,6 +69,7 @@ impl CompactCols {
             badge: w(&|s| badge_text(s).map_or(0, |b| b.chars().count() + 2)),
             cwd: w(&|s| f_cwd(s).chars().count()),
             branch: w(&|s| f_branch(s).chars().count()),
+            worktree: w(&|s| f_worktree(s).chars().count()),
             model: w(&|s| f_model(s).chars().count()),
             tokens: w(&|s| f_tokens(s).chars().count()),
             age: w(&|s| f_age(s).chars().count()),
@@ -244,6 +251,7 @@ fn rule_span(state: State, tick: u64) -> Span<'static> {
 fn compact_meta(s: &Session, cols: &CompactCols) -> String {
     let mut meta = format!("  \u{00B7}  {:<w$}", f_cwd(s), w = cols.cwd);
     push_col(&mut meta, &f_branch(s), cols.branch, false);
+    push_col(&mut meta, &f_worktree(s), cols.worktree, false);
     push_col(&mut meta, &f_model(s), cols.model, false);
     push_col(&mut meta, &f_tokens(s), cols.tokens, true);
     push_col(&mut meta, &f_age(s), cols.age, true);
@@ -326,13 +334,23 @@ fn session_item(s: &Session, tick: u64, width: usize, now_offset_ms: i64) -> Lis
         ),
     ]));
 
-    // ── line 3: the branch (only when on one)
+    // ── line 3: branch + worktree (each shown only when present), same line so a
+    // worktree reads as prominently as the branch and sibling sessions stay distinct.
     let branch = f_branch(s);
-    if !branch.is_empty() {
-        lines.push(Line::from(vec![
-            rule_span(s.state, tick),
-            Span::styled(branch, Style::default().fg(DIM)),
-        ]));
+    let worktree = f_worktree(s);
+    if !branch.is_empty() || !worktree.is_empty() {
+        let mut spans = vec![rule_span(s.state, tick)];
+        if !branch.is_empty() {
+            spans.push(Span::styled(branch, Style::default().fg(DIM)));
+        }
+        if !worktree.is_empty() {
+            let sep = if spans.len() > 1 { "    " } else { "" };
+            spans.push(Span::styled(
+                format!("{}{}", sep, worktree),
+                Style::default().fg(DIM),
+            ));
+        }
+        lines.push(Line::from(spans));
     }
 
     // ── PR opened during the session
@@ -500,6 +518,7 @@ mod tests {
             origin: Some("Zed".into()),
             model: None,
             git_branch: None,
+            worktree: None,
             pr_number: None,
             pr_url: None,
             active_span_ms: None,

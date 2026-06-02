@@ -118,6 +118,23 @@ fn origin_from_path(path: &str) -> Option<String> {
     }
 }
 
+/// Name of the linked git worktree the cwd lives in, or None for the main checkout.
+///
+/// A linked worktree's `.git` is a *file* like `gitdir: /repo/.git/worktrees/<name>`;
+/// the main checkout's `.git` is a directory (so `read_to_string` fails → None).
+fn worktree_name(cwd: &str) -> Option<String> {
+    let content = std::fs::read_to_string(std::path::Path::new(cwd).join(".git")).ok()?;
+    parse_worktree_gitdir(&content)
+}
+
+/// Pull "<name>" out of a worktree `.git` file body (`gitdir: …/worktrees/<name>`).
+/// Returns None for submodules (`…/modules/…`) or anything without a worktree path.
+fn parse_worktree_gitdir(content: &str) -> Option<String> {
+    let gitdir = content.strip_prefix("gitdir:")?.trim();
+    let name = gitdir.split("/worktrees/").nth(1)?.split('/').next()?;
+    (!name.is_empty()).then(|| name.to_string())
+}
+
 /// Claude Code encodes a cwd into a project dir name by replacing `/` and `.` with `-`.
 fn encode_cwd(cwd: &str) -> String {
     cwd.chars()
@@ -263,6 +280,7 @@ pub fn load_sessions(summarizer: &dyn Summarizer) -> Result<Vec<Session>> {
             origin,
             model: analysis.model.clone(),
             git_branch: analysis.git_branch.clone(),
+            worktree: worktree_name(&f.cwd),
             pr_number: analysis.pr_number,
             pr_url: analysis.pr_url.clone(),
             active_span_ms: analysis.active_span_ms,
@@ -283,4 +301,23 @@ pub fn load_sessions(summarizer: &dyn Summarizer) -> Result<Vec<Session>> {
             .then(a.age_ms.cmp(&b.age_ms))
     });
     Ok(sessions)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_worktree_gitdir;
+
+    #[test]
+    fn extracts_worktree_name() {
+        assert_eq!(
+            parse_worktree_gitdir("gitdir: /Users/me/repo/.git/worktrees/feature-x\n"),
+            Some("feature-x".to_string())
+        );
+    }
+
+    #[test]
+    fn ignores_submodules_and_garbage() {
+        assert_eq!(parse_worktree_gitdir("gitdir: /Users/me/repo/.git/modules/sub\n"), None);
+        assert_eq!(parse_worktree_gitdir("not a gitdir file"), None);
+    }
 }
