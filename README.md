@@ -19,6 +19,25 @@ Terminal sessions get a full card; editor/SDK sessions collapse into a compact o
 
 ## Install
 
+The quickest way — downloads the latest release binary into `~/.local/bin`,
+verifies its SHA-256 checksum, and handles `chmod`/Gatekeeper for you:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/jah2488/tend/main/install.sh | bash
+```
+
+Piping a script straight into a shell deserves a look first — read exactly what
+you'd be running here:
+[`install.sh`](https://github.com/jah2488/tend/blob/main/install.sh). It uses
+strict mode, installs only to `~/.local/bin` (override with `TEND_INSTALL_DIR`),
+needs no root, and runs nothing it downloads. If you'd rather not pipe, download
+that file, read it, and run it locally.
+
+Make sure `~/.local/bin` is on your `PATH`, then run `tend`. A pre-built binary
+is published for macOS (Apple Silicon); other platforms build from source below.
+
+### From source
+
 Requires a [Rust toolchain](https://rustup.rs).
 
 ```sh
