@@ -70,6 +70,18 @@ cargo install --path . --force
 
 `--force` is required — `cargo install` skips reinstalling unless you pass it. Then quit any running instance (`q`) and relaunch `tend`; a running process keeps the old binary until you restart it.
 
+## Releasing (maintainers)
+
+Commit your changes, then let [`release.sh`](release.sh) do the rest — version
+bump, test/clippy gate, build, checksum, commit, tag, push, and GitHub release:
+
+```sh
+./release.sh patch   # or: minor | major | an explicit X.Y.Z
+```
+
+It runs the tests and lint before changing anything and pauses for confirmation
+before pushing or publishing.
+
 ## How it works
 
 `tend` reads the session metadata Claude Code already writes under `~/.claude/` — session files in `~/.claude/sessions/` and transcripts in `~/.claude/projects/`. It parses these read-only and never modifies them. It checks whether each session's process is still alive to tell live work from finished work.
