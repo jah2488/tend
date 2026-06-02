@@ -440,6 +440,10 @@ fn header_line(sessions: &[Session]) -> Line<'static> {
                 .add_modifier(Modifier::BOLD),
         ),
         Span::styled(
+            format!(" v{}", env!("CARGO_PKG_VERSION")),
+            Style::default().fg(Color::Rgb(0x5C, 0x63, 0x70)),
+        ),
+        Span::styled(
             format!("   {live} live · {need} need you · {idle} idle"),
             Style::default().fg(Color::Rgb(0x82, 0x88, 0x96)),
         ),
