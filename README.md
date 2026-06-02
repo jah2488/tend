@@ -88,13 +88,79 @@ before pushing or publishing.
 
 No network calls, no config, no telemetry.
 
+No network calls, no config, no telemetry — *tend itself* never mutates anything. Actions
+that change your repo live in [extensions](#extensions), which run only when you invoke them.
+
 ## Keys
 
 | Key | Action |
 | --- | --- |
 | `↑` / `↓` or `j` / `k` | Move selection |
+| `Enter` / `a` | Open the action menu for the selected session |
 | `r` / `s` | Refresh now |
 | `q` / `Esc` | Quit |
+
+In the action menu: `↑`/`↓` to choose, `Enter` (or an action's own key) to run, `Esc` to cancel.
+
+## Extensions
+
+`tend` observes; extensions act. An extension is any executable on your `PATH` named
+`tend-action-<name>`. tend discovers it automatically (no config file), shows it in the action
+menu, and runs it against the selected session. The first action shipped this way is
+[`tend-ship`](https://github.com/) — commit and push a session's work.
+
+tend stays a read-only observer: it never commits, pushes, or touches the network itself. An
+extension runs as a normal subprocess with *your* privileges and is responsible for whatever
+it does. tend just hands it the terminal and the selected session's locators.
+
+**Self-description.** When tend finds `tend-action-<name>`, it runs `tend-action-<name>
+--tend-describe` once and expects a single line of JSON on stdout:
+
+```json
+{"name": "Ship", "key": "S", "when": {"source": "terminal", "has_branch": true}}
+```
+
+| Field | Meaning |
+| --- | --- |
+| `name` | Label shown in the menu (defaults to `<name>`) |
+| `key` | Suggested single-char shortcut (advisory; tend resolves collisions) |
+| `when` | Optional filter; the action is hidden for sessions it doesn't match |
+| `when.source` | `"terminal"` or `"sdk"` |
+| `when.has_branch` | `true`/`false` — require (or forbid) a git branch |
+| `when.state` | One of `working`, `needs-you`, `idle`, `done`, `stale`, `error` |
+
+Missing or malformed describe output is tolerated — the action is still listed under its
+`<name>`, with no filter.
+
+**Invocation.** When you run an action, tend leaves its TUI (so the extension can print and
+prompt freely), runs the executable with these environment variables, then returns to the
+dashboard:
+
+| Variable | Value |
+| --- | --- |
+| `TEND_VERSION` | tend's semver — for compatibility checks |
+| `TEND_ACTION` | The `<name>` it was invoked as |
+| `TEND_SESSION_ID` | Claude Code session id |
+| `TEND_PROJECT_DIR` | The session's working directory |
+| `TEND_TRANSCRIPT` | Path to the session's transcript `.jsonl` (when it exists) |
+| `TEND_GIT_BRANCH` | The session's git branch (when known) |
+| `TEND_WORKTREE` | Linked worktree name (when the session is in one) |
+| `TEND_SESSION_NAME` | Display name |
+| `TEND_SOURCE` | `terminal` or `sdk` |
+
+tend passes *locators*, never a data snapshot — read session data fresh from disk per
+invocation, so your extension stays correct even if tend isn't running. Run `tend
+--list-actions` to confirm tend discovers your extension and parsed its description.
+
+**Writing one.** [`examples/tend-action-example`](examples/tend-action-example) is a
+complete, commented reference — copy it, rename it to `tend-action-<name>`, put it on your
+`PATH`, and it shows up in the menu. To try it immediately:
+
+```sh
+cp examples/tend-action-example ~/.local/bin/tend-action-example
+tend --list-actions   # confirm discovery + describe parsing
+tend                  # select a session, press Enter, choose "Example"
+```
 
 ## License
 

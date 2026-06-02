@@ -1,0 +1,50 @@
+#!/usr/bin/env bash
+#
+# A minimal reference tend extension. Copy this, rename it to `tend-action-<name>`,
+# drop it anywhere on your PATH, and `tend` will discover it and list it in the action
+# menu (press Enter on a session). See the "Extensions" section of tend's README.
+#
+# The contract, in full:
+#
+#   * tend runs `<this> --tend-describe` once at startup and reads one line of JSON from
+#     stdout to learn how to present the action. Unknown fields are ignored; missing
+#     output just means the action lists under its <name> with no filter.
+#
+#   * When the user invokes the action, tend suspends its TUI and runs `<this>` with the
+#     selected session's locators in the environment (below). You get a real terminal:
+#     print, prompt, and confirm freely. Exit 0 for success; any non-zero code is shown
+#     in tend's footer on return.
+#
+#   * tend passes *locators*, never a data snapshot. Read session data fresh from disk
+#     yourself (e.g. parse $TEND_TRANSCRIPT) so you stay correct even when tend isn't
+#     running and even if the session changed since tend last refreshed.
+
+set -euo pipefail
+
+if [ "${1:-}" = "--tend-describe" ]; then
+  # name:    matches the binary suffix (the stable id)
+  # key:     suggested single-char shortcut (advisory — tend resolves collisions)
+  # when:    optional filter; omit it and the action always lists.
+  #          source: "terminal" | "sdk"; has_branch: true|false;
+  #          state: working|needs-you|idle|done|stale|error
+  echo '{"name": "Example", "key": "e", "when": {"source": "terminal"}}'
+  exit 0
+fi
+
+# --- invocation -------------------------------------------------------------
+# Every var below is set by tend. The optional ones may be empty; default them.
+echo "Example extension invoked by tend v${TEND_VERSION:-?}"
+echo
+printf '  %-18s %s\n' "action"      "${TEND_ACTION:-}"
+printf '  %-18s %s\n' "session id"  "${TEND_SESSION_ID:-}"
+printf '  %-18s %s\n' "project dir" "${TEND_PROJECT_DIR:-}"
+printf '  %-18s %s\n' "transcript"  "${TEND_TRANSCRIPT:-(none)}"
+printf '  %-18s %s\n' "branch"      "${TEND_GIT_BRANCH:-(none)}"
+printf '  %-18s %s\n' "worktree"    "${TEND_WORKTREE:-(none)}"
+printf '  %-18s %s\n' "name"        "${TEND_SESSION_NAME:-}"
+printf '  %-18s %s\n' "source"      "${TEND_SOURCE:-}"
+echo
+
+# A real extension would do its work here — e.g. read the last assistant message from
+# $TEND_TRANSCRIPT, compose a commit, and push. This one just confirms the handoff.
+read -r -p "Press Enter to return to tend... " _ </dev/tty

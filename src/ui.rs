@@ -1,11 +1,33 @@
+use crate::actions::Action;
 use crate::model::{Session, Source, State};
 use ratatui::{
-    layout::{Constraint, Layout},
+    layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
     text::{Line, Span},
-    widgets::{Block, List, ListItem, ListState, Padding, Paragraph},
+    widgets::{Block, Clear, List, ListItem, ListState, Padding, Paragraph},
     Frame,
 };
+
+/// Modal action-picker state: which applicable actions to offer for the selected
+/// session, and the cursor within them. `items` holds indices into the actions slice.
+pub struct Menu {
+    pub items: Vec<usize>,
+    pub selected: usize,
+}
+
+impl Menu {
+    pub fn next(&mut self) {
+        if !self.items.is_empty() {
+            self.selected = (self.selected + 1) % self.items.len();
+        }
+    }
+
+    pub fn prev(&mut self) {
+        if !self.items.is_empty() {
+            self.selected = (self.selected + self.items.len() - 1) % self.items.len();
+        }
+    }
+}
 
 const BAR_W: usize = 20;
 const CONTEXT_LIMIT: f32 = 200_000.0;
@@ -450,7 +472,17 @@ fn header_line(sessions: &[Session]) -> Line<'static> {
     ])
 }
 
-pub fn render(frame: &mut Frame, sessions: &[Session], selected: usize, tick: u64, now_offset_ms: i64) {
+#[allow(clippy::too_many_arguments)]
+pub fn render(
+    frame: &mut Frame,
+    sessions: &[Session],
+    selected: usize,
+    tick: u64,
+    now_offset_ms: i64,
+    actions: &[Action],
+    menu: Option<&Menu>,
+    status: Option<&str>,
+) {
     let chunks = Layout::vertical([
         Constraint::Length(2), // header
         Constraint::Min(1),    // list
@@ -493,10 +525,87 @@ pub fn render(frame: &mut Frame, sessions: &[Session], selected: usize, tick: u6
         frame.render_stateful_widget(list, chunks[1], &mut state);
     }
 
+    frame.render_widget(footer(actions, menu.is_some(), status), chunks[2]);
+
+    // The action picker floats over the list once opened.
+    if let Some(menu) = menu {
+        let title = sessions
+            .get(selected)
+            .map(|s| format!(" actions · {} ", s.name))
+            .unwrap_or_else(|| " actions ".to_string());
+        render_menu(frame, chunks[1], actions, menu, &title);
+    }
+}
+
+/// The footer help/status line. A transient `status` (e.g. an action result) takes
+/// precedence; otherwise the help text adapts to whether the menu is open.
+fn footer(actions: &[Action], menu_open: bool, status: Option<&str>) -> Paragraph<'static> {
+    let dim = Style::default().fg(Color::Rgb(0x5C, 0x63, 0x70));
+    if let Some(msg) = status {
+        return Paragraph::new(format!("  {msg}")).style(dim);
+    }
+    let text = if menu_open {
+        "  [↑↓] choose   [enter] run   [esc] cancel".to_string()
+    } else if actions.is_empty() {
+        "  [↑↓] navigate   [s] re-summarize   [r] refresh   [q] quit".to_string()
+    } else {
+        "  [↑↓] navigate   [enter] actions   [s] re-summarize   [r] refresh   [q] quit"
+            .to_string()
+    };
+    Paragraph::new(text).style(dim)
+}
+
+/// A centered rectangle of the given size, clamped to `area`.
+fn centered_rect(w: u16, h: u16, area: Rect) -> Rect {
+    let w = w.min(area.width);
+    let h = h.min(area.height);
+    Rect {
+        x: area.x + (area.width.saturating_sub(w)) / 2,
+        y: area.y + (area.height.saturating_sub(h)) / 2,
+        width: w,
+        height: h,
+    }
+}
+
+/// Draw the action picker as a bordered popup over the list.
+fn render_menu(frame: &mut Frame, area: Rect, actions: &[Action], menu: &Menu, title: &str) {
+    let sel = Color::Rgb(0xE5, 0xC0, 0x7B); // amber, matches NeedsYou accent
+    let rows: Vec<(String, bool)> = menu
+        .items
+        .iter()
+        .enumerate()
+        .map(|(i, &ai)| {
+            let a = &actions[ai];
+            let key = a.key.map_or_else(|| "    ".to_string(), |c| format!("[{c}] "));
+            (format!(" {key}{} ", a.label), i == menu.selected)
+        })
+        .collect();
+
+    let inner_w = rows.iter().map(|(t, _)| t.chars().count()).max().unwrap_or(0);
+    let w = (inner_w as u16 + 2).max(title.chars().count() as u16 + 2);
+    let h = rows.len() as u16 + 2; // borders
+    let rect = centered_rect(w, h, area);
+
+    let items: Vec<ListItem> = rows
+        .into_iter()
+        .map(|(text, selected)| {
+            let style = if selected {
+                Style::default().fg(sel).add_modifier(Modifier::BOLD)
+            } else {
+                Style::default().fg(Color::Rgb(0xAB, 0xB2, 0xBF))
+            };
+            ListItem::new(Line::from(Span::styled(text, style)))
+        })
+        .collect();
+
+    frame.render_widget(Clear, rect);
     frame.render_widget(
-        Paragraph::new("  [↑↓] navigate   [s] re-summarize   [r] refresh   [q] quit")
-            .style(Style::default().fg(Color::Rgb(0x5C, 0x63, 0x70))),
-        chunks[2],
+        List::new(items).block(
+            Block::bordered()
+                .title(title.to_string())
+                .border_style(Style::default().fg(DIM)),
+        ),
+        rect,
     );
 }
 
@@ -507,6 +616,8 @@ mod tests {
 
     fn sdk(name: &str, cwd: &str, tokens: u64, age_ms: i64, cpu: Option<f32>) -> Session {
         Session {
+            session_id: "test".into(),
+            transcript_path: None,
             source: Source::Sdk,
             state: State::Idle,
             name: name.into(),

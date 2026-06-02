@@ -1,4 +1,5 @@
 use ratatui::style::Color;
+use std::path::PathBuf;
 
 /// The lifecycle state of a session. Drives color, glyph, and animation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -77,6 +78,12 @@ impl Source {
 
 #[derive(Debug, Clone)]
 pub struct Session {
+    /// Claude Code's stable session id — the durable handle an extension acts on
+    /// (the UI itself works on list index, which reorders between refreshes).
+    pub session_id: String,
+    /// Absolute path to the session's transcript `.jsonl`, when it exists on disk.
+    /// Passed to extensions as a locator so they read session data fresh themselves.
+    pub transcript_path: Option<PathBuf>,
     pub source: Source,
     pub state: State,
     /// Human name: the session's own `name`, else the project dir name.

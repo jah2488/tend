@@ -342,6 +342,8 @@ pub fn load_sessions(summarizer: &dyn Summarizer) -> Result<Vec<Session>> {
         });
 
         let mut session = Session {
+            session_id: f.session_id.clone(),
+            transcript_path: transcript.clone(),
             source,
             state,
             name,
