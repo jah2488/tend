@@ -146,6 +146,53 @@ fn worktree_from_git_dir(git_dir: &str) -> Option<String> {
     (!name.is_empty()).then(|| name.to_string())
 }
 
+/// Resolve the worktree a session belongs to, returning its (name, path).
+///
+/// Two ways a session relates to a worktree:
+///   1. Its cwd *is* inside a linked worktree — detected straight from the cwd.
+///   2. It runs from the main checkout but works on a `branch` that's checked out in a
+///      sibling worktree. This is common when Claude is always launched from the source
+///      repo; the cwd stays at the main checkout, but the branch identifies the worktree.
+///
+/// Case 2 is resolved by matching the branch against `git worktree list`, which is
+/// authoritative regardless of where the worktree sits on disk.
+fn worktree_for(cwd: &str, branch: Option<&str>) -> Option<(String, String)> {
+    if let Some(name) = worktree_name(cwd) {
+        return Some((name, cwd.to_string()));
+    }
+    let path = worktree_path_for_branch(cwd, branch?)?;
+    // Reuse the cwd-based check on the matched path: it yields the name for a linked
+    // worktree and None for the main checkout, so a `main`-branch session stays unmarked.
+    let name = worktree_name(&path)?;
+    Some((name, path))
+}
+
+/// Path of the worktree that has `branch` checked out, via `git -C <cwd> worktree list`.
+/// Works from the main checkout — git reports every worktree and its branch.
+fn worktree_path_for_branch(cwd: &str, branch: &str) -> Option<String> {
+    let out = std::process::Command::new("git")
+        .arg("-C")
+        .arg(cwd)
+        .args(["worktree", "list", "--porcelain"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    // Porcelain output is blank-line-separated blocks of `worktree <path>` / `branch <ref>`.
+    let text = String::from_utf8_lossy(&out.stdout);
+    let target = format!("refs/heads/{branch}");
+    let mut path: Option<&str> = None;
+    for line in text.lines() {
+        if let Some(p) = line.strip_prefix("worktree ") {
+            path = Some(p);
+        } else if line.strip_prefix("branch ") == Some(target.as_str()) {
+            return path.map(str::to_string);
+        }
+    }
+    None
+}
+
 /// Claude Code encodes a cwd into a project dir name by replacing `/` and `.` with `-`.
 fn encode_cwd(cwd: &str) -> String {
     cwd.chars()
@@ -268,8 +315,23 @@ pub fn load_sessions(summarizer: &dyn Summarizer) -> Result<Vec<Session>> {
 
         // The session file records only the launch dir; the transcript tracks the
         // session's live cwd, which follows `cd`s into a worktree. Prefer the latter
-        // so the path and worktree match where the session actually is.
-        let cwd = analysis.cwd.clone().unwrap_or_else(|| f.cwd.clone());
+        // when it still exists, else fall back to the launch dir (the transcript path
+        // can be stale if a worktree was moved or removed).
+        let mut cwd = match analysis.cwd.clone() {
+            Some(c) if std::path::Path::new(&c).is_dir() => c,
+            _ => f.cwd.clone(),
+        };
+
+        // Resolve the worktree from the cwd, or — for sessions launched from the main
+        // checkout — from the branch via `git worktree list`. When found, surface the
+        // worktree's own path so the displayed cwd matches where the work lives.
+        let worktree = match worktree_for(&cwd, analysis.git_branch.as_deref()) {
+            Some((name, path)) => {
+                cwd = path;
+                Some(name)
+            }
+            None => None,
+        };
 
         let name = f.name.clone().unwrap_or_else(|| {
             cwd.rsplit('/')
@@ -278,8 +340,6 @@ pub fn load_sessions(summarizer: &dyn Summarizer) -> Result<Vec<Session>> {
                 .unwrap_or("session")
                 .to_string()
         });
-
-        let worktree = worktree_name(&cwd);
 
         let mut session = Session {
             source,
@@ -322,7 +382,7 @@ pub fn load_sessions(summarizer: &dyn Summarizer) -> Result<Vec<Session>> {
 
 #[cfg(test)]
 mod tests {
-    use super::{worktree_from_git_dir, worktree_name};
+    use super::{worktree_for, worktree_from_git_dir, worktree_name};
     use std::path::Path;
     use std::process::Command;
 
@@ -388,5 +448,37 @@ mod tests {
         std::fs::create_dir_all(&sub).unwrap();
         assert_eq!(worktree_name(sub.to_str().unwrap()), name); // from a nested subdir
         assert_eq!(worktree_name(main.to_str().unwrap()), None); // main checkout: no marker
+    }
+
+    // Matt's real case: Claude is launched from the main checkout (`claims`), so the cwd
+    // never points at a worktree — but the session's branch is checked out in a sibling
+    // worktree. Resolution must come from the branch, and surface the worktree's path.
+    #[test]
+    fn resolves_worktree_from_branch_in_main_checkout() {
+        let tmp = TmpDir::new("branchwt");
+        let main = tmp.0.join("claims");
+        let wt = tmp.0.join(".worktrees/CO-5390-relocate-poc-email");
+        std::fs::create_dir_all(&main).unwrap();
+        git(&main, &["init", "-q"]);
+        git(&main, &["commit", "-q", "--allow-empty", "-m", "init"]);
+        git(&main, &["worktree", "add", "-q", wt.to_str().unwrap(), "-b", "CO-5390/relocate-poc-email"]);
+
+        let main_s = main.to_str().unwrap();
+        // `git worktree list` reports the canonical path (e.g. /private/tmp on macOS).
+        let wt_real = std::fs::canonicalize(&wt).unwrap().to_str().unwrap().to_string();
+        let name = "CO-5390-relocate-poc-email".to_string();
+        // From the main checkout, the branch identifies the worktree (name + its path).
+        assert_eq!(
+            worktree_for(main_s, Some("CO-5390/relocate-poc-email")),
+            Some((name.clone(), wt_real))
+        );
+        // A session on the main branch (or unknown branch) stays unmarked.
+        assert_eq!(worktree_for(main_s, Some("main")), None);
+        assert_eq!(worktree_for(main_s, None), None);
+        // And if the cwd already is the worktree, that still resolves directly.
+        assert_eq!(
+            worktree_for(wt.to_str().unwrap(), None),
+            Some((name, wt.to_str().unwrap().to_string()))
+        );
     }
 }
