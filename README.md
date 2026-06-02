@@ -15,6 +15,8 @@ Per session, at a glance:
 
 Terminal sessions get a full card; editor/SDK sessions collapse into a compact one-liner so background work doesn't crowd out what you care about.
 
+**Worktrees:** if you run several sessions in the same repo across different [git worktrees](https://git-scm.com/docs/git-worktree), `tend` shows the worktree name (marked `⑂`) right next to the branch, so sibling sessions stay easy to tell apart.
+
 ## Install
 
 Requires a [Rust toolchain](https://rustup.rs).
@@ -36,6 +38,18 @@ Or just run it in place without installing:
 ```sh
 cargo run --release
 ```
+
+## Update
+
+Already have `tend` installed? Pull the latest and reinstall:
+
+```sh
+cd tend
+git pull
+cargo install --path . --force
+```
+
+`--force` is required — `cargo install` skips reinstalling unless you pass it. Then quit any running instance (`q`) and relaunch `tend`; a running process keeps the old binary until you restart it.
 
 ## How it works
 
