@@ -91,7 +91,9 @@ fn main() -> Result<()> {
 
 fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> Result<()> {
     loop {
-        terminal.draw(|f| ui::render(f, &app.sessions, app.selected, app.tick))?;
+        // ms since the last scan, so idle timers tick smoothly between 2s refreshes.
+        let offset_ms = app.last_refresh.elapsed().as_millis() as i64;
+        terminal.draw(|f| ui::render(f, &app.sessions, app.selected, app.tick, offset_ms))?;
 
         if event::poll(FRAME)? {
             if let Event::Key(key) = event::read()? {

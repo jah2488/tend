@@ -4,8 +4,8 @@ use crate::transcript::Analysis;
 /// Produces the one-line "what is this session actually doing now" summary.
 ///
 /// The whole point of v1 is that this is swappable: the stub below is pure local
-/// heuristics, and an AI-backed implementation (Haiku via direct API or a Netlify
-/// Function proxy) will drop in here without touching the rest of the app.
+/// heuristics, and an AI-backed implementation (Haiku via direct API or a serverless
+/// proxy) will drop in here without touching the rest of the app.
 pub trait Summarizer {
     fn summarize(&self, session: &Session, analysis: &Analysis) -> String;
 }
@@ -33,6 +33,9 @@ pub struct StubSummarizer;
 
 impl Summarizer for StubSummarizer {
     fn summarize(&self, session: &Session, analysis: &Analysis) -> String {
+        if let Some(t) = &analysis.last_prompt {
+            return one_line(t, 80);
+        }
         if let Some(t) = &analysis.last_assistant_text {
             return one_line(t, 80);
         }
