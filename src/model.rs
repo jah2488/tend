@@ -1,3 +1,4 @@
+use crate::tint::Tint;
 use ratatui::style::Color;
 use std::path::PathBuf;
 
@@ -120,4 +121,8 @@ pub struct Session {
     pub active_span_ms: Option<i64>,
     /// Live process CPU%, when the session is running.
     pub cpu_pct: Option<f32>,
+    /// User-chosen pip color, distinct from the lifecycle State color. Set by
+    /// `tend-color` (or any writer of the `~/.claude/tend-color/<id>` file).
+    /// `None` = no pip; column space is still reserved for layout.
+    pub tint: Option<Tint>,
 }

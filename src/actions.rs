@@ -265,6 +265,7 @@ mod tests {
             pr_url: None,
             active_span_ms: None,
             cpu_pct: None,
+            tint: None,
         }
     }
 
