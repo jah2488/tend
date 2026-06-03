@@ -34,6 +34,21 @@ const CONTEXT_LIMIT: f32 = 200_000.0;
 const RULE: &str = "\u{258C}"; // ▌
 const SPINNER: [&str; 8] = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧"];
 const DIM: Color = Color::Rgb(0x82, 0x88, 0x96); // secondary text
+const PIP: &str = "\u{25CF}"; // ● — user-chosen tint, or two-space placeholder
+/// Visual width of the pip column (`● ` or `  `). Reserved on every row so
+/// names stay aligned whether or not a tint is set.
+const PIP_W: usize = 2;
+
+/// Render the leading pip column for a session: `● ` in the tint color when
+/// set, or two blank spaces (preserving alignment) when not. The pip is a
+/// user-chosen flag distinct from the state-driven left rule, so it gets its
+/// own dedicated span.
+fn pip_span(s: &Session) -> Span<'static> {
+    match s.tint {
+        Some(t) => Span::styled(format!("{PIP} "), Style::default().fg(t.color())),
+        None => Span::raw("  "),
+    }
+}
 
 /// Trim the "claude-" prefix so models read as "opus-4-7" / "sonnet-4-6".
 fn short_model(m: &str) -> String {
@@ -295,9 +310,11 @@ fn compact_item(s: &Session, tick: u64, width: usize, now_offset_ms: i64, cols: 
     let mut spans = vec![
         rule_span(s.state, tick),
         Span::styled(glyph.to_string(), Style::default().fg(color)),
-        Span::raw(format!("  {}", name_field)),
+        Span::raw("  "),
+        pip_span(s),
+        Span::raw(name_field.clone()),
     ];
-    let mut w = glyph.chars().count() + 2 + name_field.chars().count();
+    let mut w = glyph.chars().count() + 2 + PIP_W + name_field.chars().count();
     if cols.badge > 0 {
         let badge_field = format!(" {:<w$}", badge_disp, w = cols.badge);
         w += badge_field.chars().count();
@@ -330,15 +347,21 @@ fn session_item(s: &Session, tick: u64, width: usize, now_offset_ms: i64) -> Lis
     };
     let status = idle_status(s, now_offset_ms);
     let stats = card_stats(s); // tokens · model · active · cpu
-    let left_w =
-        lead.chars().count() + 2 + s.name.chars().count() + 3 + stats.chars().count();
+    let left_w = lead.chars().count()
+        + 2
+        + PIP_W
+        + s.name.chars().count()
+        + 3
+        + stats.chars().count();
     let pad = inner
         .saturating_sub(left_w)
         .saturating_sub(status.chars().count());
     lines.push(Line::from(vec![
         rule_span(s.state, tick),
         Span::styled(lead.to_string(), Style::default().fg(color)),
-        Span::raw(format!("  {}", s.name)),
+        Span::raw("  "),
+        pip_span(s),
+        Span::raw(s.name.clone()),
         Span::styled(format!("   {}", stats), Style::default().fg(DIM)),
         Span::raw(" ".repeat(pad.max(1))),
         Span::styled(
@@ -638,6 +661,7 @@ mod tests {
             pr_url: None,
             active_span_ms: None,
             cpu_pct: cpu,
+            tint: None,
         }
     }
 

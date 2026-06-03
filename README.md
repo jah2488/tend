@@ -162,6 +162,28 @@ tend --list-actions   # confirm discovery + describe parsing
 tend                  # select a session, press Enter, choose "Example"
 ```
 
+## Session tints
+
+tend renders a small colored pip (`●`) before a session's name when that
+session has a *tint* set. A tint is a user-chosen flag — distinct from the
+state-driven left rule — useful for "this one's mine", "blocked on review",
+"priority", etc.
+
+tend doesn't pick tints itself. It reads them from a file convention any tool
+can write to:
+
+| Path | Contents |
+| --- | --- |
+| `~/.claude/tend-color/<session-id>` | One lowercase color name on a single line: `red`, `orange`, `yellow`, `green`, `blue`, `purple`, or `gray`. |
+
+Missing file (or unrecognized contents) = no pip. tend garbage-collects entries
+whose session id is no longer present each time it enumerates sessions, so
+stale tints don't accumulate.
+
+The first writer is the [`tend-color`](https://github.com/MattRice12/tend-color)
+extension, which exposes a `↑/↓` picker via the action menu. Any other tool
+that drops the same file works identically.
+
 ## License
 
 MIT — see [LICENSE](LICENSE).

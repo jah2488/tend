@@ -1,8 +1,10 @@
 use crate::model::{Session, Source, State};
 use crate::summarize::Summarizer;
+use crate::tint;
 use crate::transcript;
 use anyhow::Result;
 use serde::Deserialize;
+use std::collections::HashSet;
 use std::path::PathBuf;
 
 /// Finished-but-recent sessions stay "Done" for this long, then fade to "Stale".
@@ -341,6 +343,8 @@ pub fn load_sessions(summarizer: &dyn Summarizer) -> Result<Vec<Session>> {
                 .to_string()
         });
 
+        let tint = tint::read_for(&f.session_id);
+
         let mut session = Session {
             session_id: f.session_id.clone(),
             transcript_path: transcript.clone(),
@@ -364,10 +368,19 @@ pub fn load_sessions(summarizer: &dyn Summarizer) -> Result<Vec<Session>> {
             pr_url: analysis.pr_url.clone(),
             active_span_ms: analysis.active_span_ms,
             cpu_pct,
+            tint,
         };
 
         session.summary = summarizer.summarize(&session, &analysis);
         sessions.push(session);
+    }
+
+    // Sweep stale tint files (session ID no longer present), guarded on a
+    // non-empty enumeration so a transient FS error doesn't wipe colors. tend
+    // is the natural place for GC because it already walks the session universe.
+    if !sessions.is_empty() {
+        let ids: HashSet<String> = sessions.iter().map(|s| s.session_id.clone()).collect();
+        tint::gc(&ids);
     }
 
     // Interactive sessions first, then the SDK mini-list. Within each group: by state
