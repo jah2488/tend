@@ -104,6 +104,39 @@ pub fn gc(current_ids: &HashSet<String>) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::Mutex;
+
+    /// HOME is process-global, so any test that mutates it must serialize. Held
+    /// across each affected test so parallel `cargo test` runs are safe.
+    static HOME_LOCK: Mutex<()> = Mutex::new(());
+
+    /// RAII guard: take the lock, swap HOME to `path`, restore on drop.
+    struct ScopedHome {
+        _guard: std::sync::MutexGuard<'static, ()>,
+        prev: Option<std::ffi::OsString>,
+    }
+    impl ScopedHome {
+        fn to(path: &std::path::Path) -> Self {
+            let guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            let prev = std::env::var_os("HOME");
+            std::env::set_var("HOME", path);
+            ScopedHome { _guard: guard, prev }
+        }
+        fn unset() -> Self {
+            let guard = HOME_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+            let prev = std::env::var_os("HOME");
+            std::env::remove_var("HOME");
+            ScopedHome { _guard: guard, prev }
+        }
+    }
+    impl Drop for ScopedHome {
+        fn drop(&mut self) {
+            match &self.prev {
+                Some(v) => std::env::set_var("HOME", v),
+                None => std::env::remove_var("HOME"),
+            }
+        }
+    }
 
     #[test]
     fn parse_known_names() {
@@ -122,28 +155,19 @@ mod tests {
 
     #[test]
     fn read_for_returns_none_when_dir_missing() {
-        // Point HOME at an empty tempdir so ~/.claude/tend-color doesn't exist.
         let tmp = std::env::temp_dir().join(format!("tend-tint-test-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
-        let prev = std::env::var_os("HOME");
-        std::env::set_var("HOME", &tmp);
+        let _h = ScopedHome::to(&tmp);
         assert_eq!(read_for("any-id"), None);
-        if let Some(v) = prev {
-            std::env::set_var("HOME", v);
-        }
+        drop(_h);
         let _ = std::fs::remove_dir_all(&tmp);
     }
 
     #[test]
     fn gc_with_missing_dir_is_noop() {
-        // No HOME → dir() returns None → gc returns without doing anything.
-        let prev = std::env::var_os("HOME");
-        std::env::remove_var("HOME");
+        let _h = ScopedHome::unset();
         let empty: HashSet<String> = HashSet::new();
         gc(&empty); // must not panic
-        if let Some(v) = prev {
-            std::env::set_var("HOME", v);
-        }
     }
 }
