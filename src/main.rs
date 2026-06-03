@@ -7,14 +7,39 @@ mod transcript;
 mod ui;
 
 use anyhow::Result;
-use model::Session;
-use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use model::{Session, State};
+use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind, KeyModifiers};
+use std::io::IsTerminal;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 use summarize::{StubSummarizer, Summarizer};
 use ui::{Detail, Menu};
 
-const FRAME: Duration = Duration::from_millis(100); // ~10fps animation
+/// Frame interval while something is animating (Working spinner, NeedsYou pulse).
+const FRAME_ACTIVE: Duration = Duration::from_millis(100); // ~10fps
+/// Slower frame interval when nothing animates — still ticks the idle MM:SS clock,
+/// but ~5x fewer idle wakeups for an always-on dashboard (battery).
+const FRAME_IDLE: Duration = Duration::from_millis(500);
 const REFRESH: Duration = Duration::from_secs(2); // re-scan sessions
+
+/// One-screen usage, printed for `-h/--help` (stdout) or a usage error (stderr).
+fn print_usage(out: impl std::io::Write) {
+    let mut out = out;
+    let _ = write!(
+        out,
+        "tend {} — keep your Claude Code sessions in view\n\n\
+         USAGE:\n    tend [OPTIONS]\n\n\
+         OPTIONS:\n\
+         \x20   (none)              launch the live dashboard (requires a terminal)\n\
+         \x20   --list              print parsed sessions as text and exit\n\
+         \x20   --list-actions      print discovered tend-action-* extensions and exit\n\
+         \x20   --digest [ID|NAME]  print one session's digest as text and exit\n\
+         \x20   -h, --help          show this help and exit\n\
+         \x20   -V, --version       show version and exit\n",
+        env!("CARGO_PKG_VERSION"),
+    );
+}
 
 struct App {
     sessions: Vec<Session>,
@@ -136,6 +161,24 @@ impl App {
 }
 
 fn main() -> Result<()> {
+    // Restore default SIGPIPE so the text outputs behave like a normal filter: a closed
+    // downstream (`tend --digest big | head`) ends the process quietly instead of making
+    // Rust's `println!` panic with "Broken pipe". Rust sets SIGPIPE to SIG_IGN at startup.
+    unsafe {
+        libc::signal(libc::SIGPIPE, libc::SIG_DFL);
+    }
+
+    // `-h/--help` and `-V/--version` come first — a utility answers these, never launches
+    // the UI for them.
+    if std::env::args().any(|a| a == "-h" || a == "--help") {
+        print_usage(std::io::stdout());
+        return Ok(());
+    }
+    if std::env::args().any(|a| a == "-V" || a == "--version") {
+        println!("tend {}", env!("CARGO_PKG_VERSION"));
+        return Ok(());
+    }
+
     // `tend --list` prints the parsed sessions as plain text and exits — handy for
     // debugging the data pipeline without a TTY.
     if std::env::args().any(|a| a == "--list") {
@@ -229,17 +272,57 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    // Reaching here means no text-mode flag matched, so we're launching the TUI. Reject
+    // any leftover arguments (unknown flags, typos like `--lst`) with a usage error and
+    // exit 2, rather than silently ignoring them and starting the UI.
+    if let Some(bad) = std::env::args().skip(1).find(|a| !a.is_empty()) {
+        eprintln!("tend: unexpected argument '{bad}'\n");
+        print_usage(std::io::stderr());
+        std::process::exit(2);
+    }
+
+    // The dashboard needs a real terminal to draw into. Detect a non-tty stdout (piped or
+    // redirected) or a terminal that can't render (TERM unset/dumb) and bail cleanly,
+    // instead of panicking inside ratatui::init() or spewing escape sequences into a pipe.
+    let term_ok = std::env::var("TERM").map(|t| t != "dumb").unwrap_or(false);
+    if !std::io::stdout().is_terminal() || !term_ok {
+        eprintln!(
+            "tend: not a terminal — the dashboard needs an interactive TTY.\n\
+             For non-interactive use try: tend --list | --digest [ID] | --list-actions"
+        );
+        std::process::exit(1);
+    }
+
+    // Restore the terminal on a fatal signal. ratatui's init() installs a panic hook, but
+    // not a signal handler — without this, SIGTERM/SIGHUP/SIGINT would kill the process
+    // mid-draw and leave the real terminal in raw mode + alternate screen ("bricked").
+    // The handler just sets a flag; the loop notices it and exits through the normal
+    // restore() path within one frame.
+    let quit = Arc::new(AtomicBool::new(false));
+    for sig in [
+        signal_hook::consts::SIGINT,
+        signal_hook::consts::SIGTERM,
+        signal_hook::consts::SIGHUP,
+    ] {
+        signal_hook::flag::register(sig, Arc::clone(&quit))?;
+    }
+
     let mut terminal = ratatui::init();
     let mut app = App::new();
 
-    let result = run(&mut terminal, &mut app);
+    let result = run(&mut terminal, &mut app, &quit);
 
     ratatui::restore();
     result
 }
 
-fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> Result<()> {
+fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App, quit: &Arc<AtomicBool>) -> Result<()> {
     loop {
+        // A fatal signal (SIGTERM/SIGHUP/SIGINT) flips this; exit via the normal restore().
+        if quit.load(Ordering::Relaxed) {
+            break;
+        }
+
         // ms since the last scan, so idle timers tick smoothly between 2s refreshes.
         let offset_ms = app.last_refresh.elapsed().as_millis() as i64;
         terminal.draw(|f| {
@@ -256,9 +339,38 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> Result<()> {
             )
         })?;
 
-        if event::poll(FRAME)? {
+        // Throttle the frame rate when nothing animates — far fewer idle wakeups for an
+        // always-on dashboard. Key events still wake the poll immediately.
+        let animating = app.menu.is_none()
+            && app.detail.is_none()
+            && app
+                .sessions
+                .iter()
+                .any(|s| matches!(s.state, State::Working | State::NeedsYou));
+        let frame = if animating { FRAME_ACTIVE } else { FRAME_IDLE };
+
+        if event::poll(frame)? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
+                    // Universal shortcuts, regardless of the focused view.
+                    if key.modifiers.contains(KeyModifiers::CONTROL) {
+                        match key.code {
+                            // Ctrl-C / Ctrl-D quit. Raw mode delivers these as key events,
+                            // not signals, so the loop has to handle them explicitly.
+                            KeyCode::Char('c') | KeyCode::Char('d') => break,
+                            // Ctrl-Z suspends to the shell; we re-enter on resume.
+                            KeyCode::Char('z') => {
+                                suspend(terminal);
+                                continue;
+                            }
+                            // Ctrl-L forces a full redraw.
+                            KeyCode::Char('l') => {
+                                let _ = terminal.clear();
+                                continue;
+                            }
+                            _ => {}
+                        }
+                    }
                     if app.detail.is_some() {
                         // ── modal: digest panel is open ──
                         match key.code {
@@ -333,4 +445,16 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> Result<()> {
         }
     }
     Ok(())
+}
+
+/// Suspend tend on Ctrl-Z: hand the terminal back to the shell, stop via SIGTSTP, then
+/// re-enter the TUI when the shell foregrounds us again (after SIGCONT). Without restoring
+/// first, a suspended tend would leave the shell in raw mode + alternate screen.
+fn suspend(terminal: &mut ratatui::DefaultTerminal) {
+    ratatui::restore();
+    // Stops here until `fg` (SIGCONT); execution resumes on the next line.
+    unsafe {
+        libc::raise(libc::SIGTSTP);
+    }
+    *terminal = ratatui::init();
 }

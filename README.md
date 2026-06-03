@@ -99,7 +99,9 @@ that change your repo live in [extensions](#extensions), which run only when you
 | `Enter` / `a` | Open the action menu for the selected session |
 | `Tab` | Open the [session digest](#session-digest) for the selected session |
 | `r` / `s` | Refresh now |
-| `q` / `Esc` | Quit |
+| `q` / `Esc` / `Ctrl-C` / `Ctrl-D` | Quit |
+| `Ctrl-Z` | Suspend to the shell (`fg` to resume) |
+| `Ctrl-L` | Force a redraw |
 
 In the action menu: `↑`/`↓` to choose, `Enter` (or an action's own key) to run, `Esc` to cancel.
 
