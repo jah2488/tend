@@ -97,6 +97,7 @@ that change your repo live in [extensions](#extensions), which run only when you
 | --- | --- |
 | `↑` / `↓` or `j` / `k` | Move selection |
 | `Enter` / `a` | Open the action menu for the selected session |
+| `Tab` | Open the [session digest](#session-digest) for the selected session |
 | `r` / `s` | Refresh now |
 | `q` / `Esc` | Quit |
 
@@ -183,6 +184,32 @@ stale tints don't accumulate.
 The first writer is the [`tend-color`](https://github.com/MattRice12/tend-color)
 extension, which exposes a `↑/↓` picker via the action menu. Any other tool
 that drops the same file works identically.
+
+## Session digest
+
+The list answers *which* sessions need you. Press `Tab` on a selected session to
+open its **digest** — a read-only, scrollable account of what that session actually
+did, read fresh from its transcript when you open it.
+
+![The session digest panel](docs/tend-details.png)
+
+The panel is built from the transcript `tend` already parses — no network, no new
+data source — and is frozen at open time, so the list refreshing underneath it can't
+shuffle it out from under you. `↑`/`↓` scrolls; `Tab` or `Esc` closes.
+
+What it shows, top to bottom:
+
+- **Cost** — total tokens, context fullness, and the wall-clock span of activity.
+- **Asked / Latest** — the first prompt that framed the session and the most recent one.
+- **Tools** — a histogram of every tool the session called, by frequency. MCP calls
+  collapse to `Server·method` (e.g. `Notion·notion-fetch`).
+- **Resources** — MCP integrations touched, with counts, plus web requests.
+- **Files** — files changed (listed) versus files read (counted).
+- **Outcomes** — any PR opened during the session, and how many errors it hit.
+- **Timeline** — the full chronological feed: every prompt, tool call, file read/edit,
+  shell command, web request, PR, and error, each stamped with its time into the
+  session. Tool families read by glyph (`▸` read · `✎` edit · `$` shell · `⌖` web ·
+  `◦` other), with prompts, PRs, and errors called out in color.
 
 ## License
 

@@ -1,5 +1,6 @@
 use crate::actions::Action;
 use crate::model::{Session, Source, State};
+use crate::transcript::{Digest, EventKind};
 use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -26,6 +27,27 @@ impl Menu {
         if !self.items.is_empty() {
             self.selected = (self.selected + self.items.len() - 1) % self.items.len();
         }
+    }
+}
+
+/// The session-digest overlay: a frozen, scrollable read of one session's transcript.
+/// Pre-rendered at open time (lines are owned) so it's immune to the list reordering
+/// underneath it on the next 2s refresh, and cheap to redraw each frame.
+pub struct Detail {
+    pub title: String,
+    pub lines: Vec<Line<'static>>,
+    pub scroll: u16,
+}
+
+impl Detail {
+    fn max_scroll(&self) -> u16 {
+        self.lines.len().saturating_sub(1) as u16
+    }
+    pub fn scroll_down(&mut self) {
+        self.scroll = (self.scroll + 1).min(self.max_scroll());
+    }
+    pub fn scroll_up(&mut self) {
+        self.scroll = self.scroll.saturating_sub(1);
     }
 }
 
@@ -504,6 +526,7 @@ pub fn render(
     now_offset_ms: i64,
     actions: &[Action],
     menu: Option<&Menu>,
+    detail: Option<&Detail>,
     status: Option<&str>,
 ) {
     let chunks = Layout::vertical([
@@ -548,7 +571,7 @@ pub fn render(
         frame.render_stateful_widget(list, chunks[1], &mut state);
     }
 
-    frame.render_widget(footer(actions, menu.is_some(), status), chunks[2]);
+    frame.render_widget(footer(actions, menu.is_some(), detail.is_some(), status), chunks[2]);
 
     // The action picker floats over the list once opened.
     if let Some(menu) = menu {
@@ -558,21 +581,28 @@ pub fn render(
             .unwrap_or_else(|| " actions ".to_string());
         render_menu(frame, chunks[1], actions, menu, &title);
     }
+
+    // The digest panel floats over everything when open.
+    if let Some(detail) = detail {
+        render_detail(frame, chunks[1], detail);
+    }
 }
 
 /// The footer help/status line. A transient `status` (e.g. an action result) takes
 /// precedence; otherwise the help text adapts to whether the menu is open.
-fn footer(actions: &[Action], menu_open: bool, status: Option<&str>) -> Paragraph<'static> {
+fn footer(actions: &[Action], menu_open: bool, detail_open: bool, status: Option<&str>) -> Paragraph<'static> {
     let dim = Style::default().fg(Color::Rgb(0x5C, 0x63, 0x70));
     if let Some(msg) = status {
         return Paragraph::new(format!("  {msg}")).style(dim);
     }
-    let text = if menu_open {
+    let text = if detail_open {
+        "  [↑↓] scroll   [tab/esc] close".to_string()
+    } else if menu_open {
         "  [↑↓] choose   [enter] run   [esc] cancel".to_string()
     } else if actions.is_empty() {
-        "  [↑↓] navigate   [s] re-summarize   [r] refresh   [q] quit".to_string()
+        "  [↑↓] navigate   [tab] details   [s] re-summarize   [r] refresh   [q] quit".to_string()
     } else {
-        "  [↑↓] navigate   [enter] actions   [s] re-summarize   [r] refresh   [q] quit"
+        "  [↑↓] navigate   [tab] details   [enter] actions   [s] re-summarize   [r] refresh   [q] quit"
             .to_string()
     };
     Paragraph::new(text).style(dim)
@@ -627,6 +657,212 @@ fn render_menu(frame: &mut Frame, area: Rect, actions: &[Action], menu: &Menu, t
             Block::bordered()
                 .title(title.to_string())
                 .border_style(Style::default().fg(DIM)),
+        ),
+        rect,
+    );
+}
+
+// ── Session digest ──
+
+const TEXT: Color = Color::Rgb(0xAB, 0xB2, 0xBF); // primary readable text
+const LBL_W: usize = 10; // section-label column (widest label "RESOURCES" + a gap)
+const HIST_W: usize = 22; // max tool-histogram bar width
+const BAR: Color = Color::Rgb(0x56, 0xB6, 0xC2); // tool bars — calm cyan
+
+fn trunc(s: &str, n: usize) -> String {
+    let s = s.split_whitespace().collect::<Vec<_>>().join(" ");
+    if s.chars().count() <= n {
+        s
+    } else {
+        format!("{}\u{2026}", s.chars().take(n.saturating_sub(1)).collect::<String>())
+    }
+}
+
+/// A `LABEL  body…` line: dim fixed-width label, then content spans.
+fn kv(label: &str, body: Vec<Span<'static>>) -> Line<'static> {
+    let mut spans = vec![
+        Span::raw("  "),
+        Span::styled(format!("{:<w$}", label, w = LBL_W), Style::default().fg(DIM)),
+    ];
+    spans.extend(body);
+    Line::from(spans)
+}
+
+fn plain(label: &str, body: String) -> Line<'static> {
+    kv(label, vec![Span::styled(body, Style::default().fg(TEXT))])
+}
+
+/// Build the pre-rendered digest overlay for one session.
+pub fn build_detail(s: &Session, d: &Digest) -> Detail {
+    let mut lines: Vec<Line<'static>> = Vec::new();
+
+    // Header: state · model · branch · worktree · cwd.
+    let mut head = vec![
+        Span::raw("  "),
+        Span::styled(
+            format!("{} {}", s.state.glyph(), s.state.label()),
+            Style::default().fg(s.state.color()).add_modifier(Modifier::BOLD),
+        ),
+    ];
+    if let Some(m) = &s.model {
+        head.push(Span::styled(format!("   {}", short_model(m)), Style::default().fg(TEXT)));
+    }
+    let bw = f_branch(s);
+    if !bw.is_empty() {
+        head.push(Span::styled(format!("   {}", bw), Style::default().fg(DIM)));
+    }
+    let wt = f_worktree(s);
+    if !wt.is_empty() {
+        head.push(Span::styled(format!("  {}", wt), Style::default().fg(DIM)));
+    }
+    head.push(Span::styled(format!("   {}", short_cwd(&s.cwd)), Style::default().fg(DIM)));
+    lines.push(Line::from(head));
+    lines.push(Line::from(""));
+
+    // COST.
+    let span = d.active_span_ms.map(fmt_idle_clock).unwrap_or_else(|| "—".into());
+    let pct = (d.context_tokens as f32 / CONTEXT_LIMIT * 100.0).clamp(0.0, 100.0);
+    lines.push(plain(
+        "COST",
+        format!(
+            "{} tok   ctx {:.0}%   span {}",
+            fmt_tokens(d.total_tokens),
+            pct,
+            span
+        ),
+    ));
+    lines.push(Line::from(""));
+
+    // ASKED / LATEST — framing prompts, kept near the top before the long feed.
+    if let Some(p) = &d.first_prompt {
+        lines.push(plain("ASKED", format!("\u{201C}{}\u{201D}", trunc(p, 72))));
+    }
+    if let Some(p) = &d.last_prompt {
+        if Some(p) != d.first_prompt.as_ref() {
+            lines.push(plain("LATEST", format!("\u{201C}{}\u{201D}", trunc(p, 72))));
+        }
+    }
+    lines.push(Line::from(""));
+
+    // TOOLS histogram, highest-first, top 14.
+    if d.tool_counts.is_empty() {
+        lines.push(plain("TOOLS", "—".into()));
+    } else {
+        let max = d.tool_counts.iter().map(|(_, c)| *c).max().unwrap_or(1).max(1);
+        for (i, (name, count)) in d.tool_counts.iter().take(14).enumerate() {
+            let filled = ((*count as usize * HIST_W) / max as usize).max(1);
+            let bar = format!("{}{}", "\u{2588}".repeat(filled), " ".repeat(HIST_W - filled));
+            lines.push(kv(
+                if i == 0 { "TOOLS" } else { "" },
+                vec![
+                    Span::styled(format!("{:<14}", trunc(name, 14)), Style::default().fg(TEXT)),
+                    Span::styled(bar, Style::default().fg(BAR)),
+                    Span::styled(format!(" {}", count), Style::default().fg(DIM)),
+                ],
+            ));
+        }
+        if d.tool_counts.len() > 14 {
+            lines.push(kv("", vec![Span::styled(format!("+{} more", d.tool_counts.len() - 14), Style::default().fg(DIM))]));
+        }
+    }
+    lines.push(Line::from(""));
+
+    // RESOURCES: MCP integrations with counts, plus web requests.
+    let mut res: Vec<String> = d.integration_counts.iter().map(|(n, c)| format!("{n} \u{00D7}{c}")).collect();
+    if d.web_requests > 0 {
+        res.push(format!("web \u{00D7}{}", d.web_requests));
+    }
+    lines.push(plain("RESOURCES", if res.is_empty() { "—".into() } else { res.join("  \u{00B7}  ") }));
+    lines.push(Line::from(""));
+
+    // FILES: changed (listed) and read (count + sample).
+    if d.files_edited.is_empty() {
+        lines.push(plain("FILES", "no files changed".into()));
+    } else {
+        let shown = d.files_edited.iter().take(12).map(|f| base_name(f)).collect::<Vec<_>>().join(" \u{00B7} ");
+        let extra = d.files_edited.len().saturating_sub(12);
+        let body = if extra > 0 { format!("{shown}  +{extra}") } else { shown };
+        lines.push(kv("FILES", vec![
+            Span::styled("changed  ", Style::default().fg(DIM)),
+            Span::styled(body, Style::default().fg(TEXT)),
+        ]));
+    }
+    if !d.files_read.is_empty() {
+        lines.push(kv("", vec![
+            Span::styled("read     ", Style::default().fg(DIM)),
+            Span::styled(format!("{} files", d.files_read.len()), Style::default().fg(TEXT)),
+        ]));
+    }
+    lines.push(Line::from(""));
+
+    // OUTCOMES: PR opened, error count.
+    let pr = match (&d.pr_url, d.pr_number) {
+        (Some(_), Some(n)) => format!("PR #{n} opened"),
+        (Some(u), None) => format!("PR opened ({u})"),
+        _ => "no PR opened".into(),
+    };
+    let err = if d.error_count == 0 { "errors 0".to_string() } else { format!("errors {}", d.error_count) };
+    let err_color = if d.error_count == 0 { DIM } else { Color::Rgb(0xE0, 0x6C, 0x75) };
+    lines.push(kv("OUTCOMES", vec![
+        Span::styled(format!("{:<22}", pr), Style::default().fg(TEXT)),
+        Span::styled(err, Style::default().fg(err_color)),
+    ]));
+    lines.push(Line::from(""));
+
+    // TIMELINE: full chronological feed — prompts, every tool call, PRs, errors.
+    if !d.timeline.is_empty() {
+        let dropped = d.timeline_dropped;
+        if dropped > 0 {
+            lines.push(kv("TIMELINE", vec![Span::styled(format!("+{dropped} earlier events elided"), Style::default().fg(DIM))]));
+        }
+        for (i, ev) in d.timeline.iter().enumerate() {
+            let label = if i == 0 && dropped == 0 { "TIMELINE" } else { "" };
+            // Glyph + color per kind; prompts/PRs/errors stand out, tool calls read by family.
+            let (mark, color) = match ev.kind {
+                EventKind::Prompt => ("\u{276F}", Color::Rgb(0x61, 0xAF, 0xEF)), // ❯ blue
+                EventKind::Pr => ("\u{2387}", Color::Rgb(0x98, 0xC3, 0x79)),     // ⎇ green
+                EventKind::Error => ("\u{2715}", Color::Rgb(0xE0, 0x6C, 0x75)),  // ✕ red
+                EventKind::Read => ("\u{25B8}", Color::Rgb(0x82, 0x88, 0x96)),   // ▸ grey
+                EventKind::Edit => ("\u{270E}", Color::Rgb(0xE5, 0xC0, 0x7B)),   // ✎ amber
+                EventKind::Bash => ("\u{0024}", Color::Rgb(0x98, 0xC3, 0x79)),   // $ green
+                EventKind::Web => ("\u{2316}", Color::Rgb(0x56, 0xB6, 0xC2)),    // ⌖ cyan
+                EventKind::Tool => ("\u{25E6}", Color::Rgb(0x82, 0x88, 0x96)),   // ◦ grey
+            };
+            // Milestones (prompt/PR/error) in their accent; tool lines in plain text so the
+            // glyph carries the family and the feed stays calm.
+            let text_color = matches!(ev.kind, EventKind::Prompt | EventKind::Pr | EventKind::Error)
+                .then_some(color)
+                .unwrap_or(TEXT);
+            lines.push(kv(label, vec![
+                Span::styled(format!("{:>8} ", fmt_idle_clock(ev.at_ms)), Style::default().fg(DIM)),
+                Span::styled(format!("{mark} "), Style::default().fg(color)),
+                Span::styled(trunc(&ev.text, 84), Style::default().fg(text_color)),
+            ]));
+        }
+        lines.push(Line::from(""));
+    }
+
+    Detail { title: format!(" digest \u{00B7} {} ", s.name), lines, scroll: 0 }
+}
+
+fn base_name(path: &str) -> String {
+    path.rsplit('/').next().filter(|s| !s.is_empty()).unwrap_or(path).to_string()
+}
+
+/// Draw the digest as a near-fullscreen scrollable panel over the list. Only the
+/// visible slice is cloned per frame, so a 1500-line timeline stays cheap to redraw.
+fn render_detail(frame: &mut Frame, area: Rect, detail: &Detail) {
+    let rect = centered_rect(area.width.saturating_sub(2), area.height, area);
+    let inner_h = rect.height.saturating_sub(2) as usize; // borders top+bottom
+    let start = (detail.scroll as usize).min(detail.lines.len().saturating_sub(1));
+    let visible: Vec<Line> = detail.lines.iter().skip(start).take(inner_h).cloned().collect();
+    frame.render_widget(Clear, rect);
+    frame.render_widget(
+        Paragraph::new(visible).block(
+            Block::bordered()
+                .title(detail.title.clone())
+                .border_style(Style::default().fg(DIM))
+                .padding(Padding::new(1, 1, 0, 0)),
         ),
         rect,
     );

@@ -11,7 +11,7 @@ use model::Session;
 use ratatui::crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use std::time::{Duration, Instant};
 use summarize::{StubSummarizer, Summarizer};
-use ui::Menu;
+use ui::{Detail, Menu};
 
 const FRAME: Duration = Duration::from_millis(100); // ~10fps animation
 const REFRESH: Duration = Duration::from_secs(2); // re-scan sessions
@@ -27,6 +27,8 @@ struct App {
     actions: Vec<actions::Action>,
     /// The action picker, when open.
     menu: Option<Menu>,
+    /// The session-digest overlay, when open.
+    detail: Option<Detail>,
     /// Transient footer message (e.g. the result of running an action).
     status_msg: Option<String>,
 }
@@ -43,7 +45,24 @@ impl App {
             last_refresh: Instant::now(),
             actions: actions::discover(),
             menu: None,
+            detail: None,
             status_msg: None,
+        }
+    }
+
+    /// Open the digest overlay for the selected session, reading its transcript fresh.
+    /// The panel is frozen at open time, so it's unaffected by list refreshes underneath.
+    fn open_detail(&mut self) {
+        let Some(s) = self.sessions.get(self.selected) else {
+            return;
+        };
+        match &s.transcript_path {
+            Some(p) => {
+                let digest = transcript::digest(p);
+                self.status_msg = None;
+                self.detail = Some(ui::build_detail(s, &digest));
+            }
+            None => self.status_msg = Some("no transcript for this session yet".into()),
         }
     }
 
@@ -159,6 +178,57 @@ fn main() -> Result<()> {
         return Ok(());
     }
 
+    // `tend --digest [id|name]` prints one session's digest as plain text and exits —
+    // verify the timeline/extraction without a TTY. Defaults to the first session.
+    if let Some(pos) = std::env::args().position(|a| a == "--digest") {
+        let needle = std::env::args().nth(pos + 1);
+        let summarizer = StubSummarizer;
+        let sessions = discovery::load_sessions(&summarizer)?;
+        let sel = match &needle {
+            Some(n) => sessions
+                .iter()
+                .find(|s| s.session_id.contains(n.as_str()) || s.name.contains(n.as_str())),
+            None => sessions.first(),
+        };
+        let Some(s) = sel else {
+            println!("no matching session");
+            return Ok(());
+        };
+        let Some(tp) = &s.transcript_path else {
+            println!("{} has no transcript on disk", s.name);
+            return Ok(());
+        };
+        let d = transcript::digest(tp);
+        let tool_total: u64 = d.tool_counts.iter().map(|(_, c)| c).sum();
+        println!("digest · {}  [{}]", s.name, s.state.label());
+        println!(
+            "  {} tok · {} tool calls · {} integrations · {} files changed · {} timeline events (+{} elided)",
+            d.total_tokens, tool_total, d.integration_counts.len(), d.files_edited.len(),
+            d.timeline.len(), d.timeline_dropped,
+        );
+        println!(
+            "  TOOLS: {}",
+            d.tool_counts.iter().take(14).map(|(n, c)| format!("{n}×{c}")).collect::<Vec<_>>().join(", ")
+        );
+        println!("  TIMELINE:");
+        for ev in &d.timeline {
+            let t = ev.at_ms / 1000;
+            // A 1-char family marker mirrors the TUI glyph; text already carries detail.
+            let mark = match ev.kind {
+                transcript::EventKind::Prompt => '>',
+                transcript::EventKind::Pr => '@',
+                transcript::EventKind::Error => 'x',
+                transcript::EventKind::Read => 'r',
+                transcript::EventKind::Edit => 'e',
+                transcript::EventKind::Bash => '$',
+                transcript::EventKind::Web => 'w',
+                transcript::EventKind::Tool => '.',
+            };
+            println!("    {:>3}:{:02}  {}  {}", t / 60, t % 60, mark, ev.text);
+        }
+        return Ok(());
+    }
+
     let mut terminal = ratatui::init();
     let mut app = App::new();
 
@@ -181,6 +251,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> Result<()> {
                 offset_ms,
                 &app.actions,
                 app.menu.as_ref(),
+                app.detail.as_ref(),
                 app.status_msg.as_deref(),
             )
         })?;
@@ -188,7 +259,23 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> Result<()> {
         if event::poll(FRAME)? {
             if let Event::Key(key) = event::read()? {
                 if key.kind == KeyEventKind::Press {
-                    if app.menu.is_some() {
+                    if app.detail.is_some() {
+                        // ── modal: digest panel is open ──
+                        match key.code {
+                            KeyCode::Esc | KeyCode::Tab | KeyCode::Char('q') => app.detail = None,
+                            KeyCode::Down | KeyCode::Char('j') => {
+                                if let Some(d) = &mut app.detail {
+                                    d.scroll_down();
+                                }
+                            }
+                            KeyCode::Up | KeyCode::Char('k') => {
+                                if let Some(d) = &mut app.detail {
+                                    d.scroll_up();
+                                }
+                            }
+                            _ => {}
+                        }
+                    } else if app.menu.is_some() {
                         // ── modal: action picker is open ──
                         match key.code {
                             KeyCode::Esc => app.menu = None,
@@ -232,6 +319,7 @@ fn run(terminal: &mut ratatui::DefaultTerminal, app: &mut App) -> Result<()> {
                             KeyCode::Up | KeyCode::Char('k') => app.select_prev(),
                             KeyCode::Char('r') | KeyCode::Char('s') => app.refresh(),
                             KeyCode::Enter | KeyCode::Char('a') => app.open_menu(),
+                            KeyCode::Tab => app.open_detail(),
                             _ => {}
                         }
                     }
