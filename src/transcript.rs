@@ -259,7 +259,7 @@ fn tool_kind(name: &str) -> EventKind {
 }
 
 /// Last path segment of a file path, for compact timeline display.
-fn base_name(path: &str) -> &str {
+pub(crate) fn base_name(path: &str) -> &str {
     path.rsplit('/').next().filter(|s| !s.is_empty()).unwrap_or(path)
 }
 

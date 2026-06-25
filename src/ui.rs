@@ -1,6 +1,6 @@
 use crate::actions::Action;
 use crate::model::{Session, Source, State};
-use crate::transcript::{Digest, EventKind};
+use crate::transcript::{base_name, Digest, EventKind};
 use ratatui::{
     layout::{Constraint, Layout, Rect},
     style::{Color, Modifier, Style},
@@ -257,9 +257,13 @@ fn wrap2(s: &str, width: usize) -> Vec<String> {
     if lines.len() < 2 && !cur.is_empty() {
         lines.push(cur);
     }
-    if lines.len() == 2 && lines[1].chars().count() > width {
-        let cut: String = lines[1].chars().take(width.saturating_sub(1)).collect();
-        lines[1] = format!("{}\u{2026}", cut.trim_end());
+    // Truncate any line that overflowed `width`: the wrapped second line, or a single
+    // long token that never triggered a break (a URL or path wrap2 leaves verbatim).
+    for line in lines.iter_mut() {
+        if line.chars().count() > width {
+            let cut: String = line.chars().take(width.saturating_sub(1)).collect();
+            *line = format!("{}\u{2026}", cut.trim_end());
+        }
     }
     lines
 }
@@ -299,12 +303,6 @@ fn rule_span(state: State, tick: u64) -> Span<'static> {
     Span::styled(format!("{RULE} "), Style::default().fg(c))
 }
 
-/// One-line row for non-interactive sessions (SDK / editor-launched), to keep the
-/// background processes from crowding out the terminal sessions you care about.
-/// `name_col`/`badge_col` are the widest name/badge across all compact rows, so the
-/// badge column and everything after it line up vertically. Every row is padded to
-/// the exact same total width, with the status hard-right-aligned.
-/// Layout:  ▌ ◇ name….. [Zed · sdk]  ·  ~/path · model · 12K tok · 2d      ○ IDLE …
 /// The fixed-width column meta for a compact row. Same width for every row given the
 /// same `cols`, which is what makes the cwd/tokens/age/cpu columns line up vertically.
 fn compact_meta(s: &Session, cols: &CompactCols) -> String {
@@ -318,6 +316,12 @@ fn compact_meta(s: &Session, cols: &CompactCols) -> String {
     meta
 }
 
+/// One-line row for non-interactive sessions (SDK / editor-launched), to keep the
+/// background processes from crowding out the terminal sessions you care about.
+/// `cols.name`/`cols.badge` are the widest name/badge across all compact rows, so the
+/// badge column and everything after it line up vertically. Every row is padded to
+/// the exact same total width, with the status hard-right-aligned.
+/// Layout:  ▌ ◇ name….. [Zed · sdk]  ·  ~/path · model · 12K tok · 2d      ○ IDLE …
 fn compact_item(s: &Session, tick: u64, width: usize, now_offset_ms: i64, cols: &CompactCols) -> ListItem<'static> {
     let color = s.state.color();
     let inner = width.saturating_sub(2); // account for the rule + space
@@ -600,10 +604,9 @@ fn footer(actions: &[Action], menu_open: bool, detail_open: bool, status: Option
     } else if menu_open {
         "  [↑↓] choose   [enter] run   [esc] cancel".to_string()
     } else if actions.is_empty() {
-        "  [↑↓] navigate   [tab] details   [s] re-summarize   [r] refresh   [q] quit".to_string()
+        "  [↑↓] navigate   [tab] details   [r] refresh   [q] quit".to_string()
     } else {
-        "  [↑↓] navigate   [tab] details   [enter] actions   [s] re-summarize   [r] refresh   [q] quit"
-            .to_string()
+        "  [↑↓] navigate   [tab] details   [enter] actions   [r] refresh   [q] quit".to_string()
     };
     Paragraph::new(text).style(dim)
 }
@@ -843,10 +846,6 @@ pub fn build_detail(s: &Session, d: &Digest) -> Detail {
     }
 
     Detail { title: format!(" digest \u{00B7} {} ", s.name), lines, scroll: 0 }
-}
-
-fn base_name(path: &str) -> String {
-    path.rsplit('/').next().filter(|s| !s.is_empty()).unwrap_or(path).to_string()
 }
 
 /// Draw the digest as a near-fullscreen scrollable panel over the list. Only the

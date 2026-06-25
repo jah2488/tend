@@ -151,10 +151,13 @@ pub fn discover() -> Vec<Action> {
             let Some(name) = fname.strip_prefix("tend-action-") else {
                 continue;
             };
-            if name.is_empty() || !seen.insert(name.to_string()) {
+            // Check executability before reserving the name, so a non-executable entry
+            // (a backup file, a directory) can't shadow a runnable tend-action-<name>
+            // later on PATH — matches how a shell resolves commands.
+            if name.is_empty() || !is_executable(&entry.path()) {
                 continue;
             }
-            if !is_executable(&entry.path()) {
+            if !seen.insert(name.to_string()) {
                 continue;
             }
             actions.push(build_action(name.to_string(), entry.path()));

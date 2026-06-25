@@ -5,12 +5,12 @@ use std::path::PathBuf;
 /// The lifecycle state of a session. Drives color, glyph, and animation.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum State {
-    Working,  // live process, actively churning
-    NeedsYou, // live process, waiting on you (permission / input)
-    Idle,     // live process, but not actively working (status "idle" or unknown)
-    Done,     // finished cleanly, recently
-    Stale,    // finished a while ago, safe to ignore
-    Error,    // last turn ended in an error
+    Working,
+    NeedsYou,
+    Idle, // live process, but not actively working (status "idle" or unknown)
+    Done,  // finished cleanly, recently
+    Stale, // finished a while ago, safe to ignore
+    Error, // last turn ended in an error
 }
 
 impl State {

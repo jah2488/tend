@@ -165,9 +165,23 @@ mod tests {
     }
 
     #[test]
-    fn gc_with_missing_dir_is_noop() {
+    fn gc_with_home_unset_is_noop() {
         let _h = ScopedHome::unset();
         let empty: HashSet<String> = HashSet::new();
-        gc(&empty); // must not panic
+        gc(&empty); // must not panic; dir() returns None → early return
+    }
+
+    /// The genuine missing-dir branch: HOME is set but ~/.claude/tend-color doesn't
+    /// exist, so read_dir errors and gc early-returns without panicking.
+    #[test]
+    fn gc_with_missing_tint_dir_is_noop() {
+        let tmp = std::env::temp_dir().join(format!("tend-tint-nodir-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        let _h = ScopedHome::to(&tmp); // tmp exists, but tmp/.claude/tend-color does not
+        let empty: HashSet<String> = HashSet::new();
+        gc(&empty); // read_dir Err → early return, no panic
+        drop(_h);
+        let _ = std::fs::remove_dir_all(&tmp);
     }
 }

@@ -284,11 +284,20 @@ fn main() -> Result<()> {
     // The dashboard needs a real terminal to draw into. Detect a non-tty stdout (piped or
     // redirected) or a terminal that can't render (TERM unset/dumb) and bail cleanly,
     // instead of panicking inside ratatui::init() or spewing escape sequences into a pipe.
-    let term_ok = std::env::var("TERM").map(|t| t != "dumb").unwrap_or(false);
-    if !std::io::stdout().is_terminal() || !term_ok {
+    if !std::io::stdout().is_terminal() {
         eprintln!(
             "tend: not a terminal — the dashboard needs an interactive TTY.\n\
              For non-interactive use try: tend --list | --digest [ID] | --list-actions"
+        );
+        std::process::exit(1);
+    }
+    // stdout is a tty, but TERM is unset or 'dumb' — report the real condition instead
+    // of the misleading "not a terminal" the combined guard used to print.
+    let term_ok = std::env::var("TERM").map(|t| t != "dumb").unwrap_or(false);
+    if !term_ok {
+        eprintln!(
+            "tend: TERM is unset or 'dumb' — the dashboard needs a capable terminal.\n\
+             Try: TERM=xterm-256color tend"
         );
         std::process::exit(1);
     }
