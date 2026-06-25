@@ -92,6 +92,8 @@ No network calls, no config, no telemetry.
 
 No network calls, no config, no telemetry — *tend itself* never mutates anything. Actions
 that change your repo live in [extensions](#extensions), which run only when you invoke them.
+The [`tend mcp`](#mcp-server) subcommand is the one opt-in exception: a local stdio server
+that writes only small annotation files (tints, notes), and only when a client asks.
 
 ## Keys
 
@@ -167,6 +169,36 @@ tend --list-actions   # confirm discovery + describe parsing
 tend                  # select a session, press Enter, choose "Example"
 ```
 
+## MCP server
+
+`tend mcp` runs tend as a [Model Context Protocol](https://modelcontextprotocol.com) server over stdio, so another program — another Claude Code session, an editor, a script — can query your sessions and annotate them. It's an opt-in subcommand; the dashboard itself stays a passive observer.
+
+Register it with Claude Code:
+
+```sh
+claude mcp add tend -- tend mcp
+```
+
+or add to a project `.mcp.json`:
+
+```json
+{ "mcpServers": { "tend": { "command": "tend", "args": ["mcp"] } } }
+```
+
+Tools it exposes:
+
+| Tool | What it does |
+| --- | --- |
+| `list_sessions` | list every session, newest-first |
+| `needs_attention` | sessions in `needs-you` or `error` state |
+| `get_session` (id) | full detail for one session |
+| `get_digest` (id) | transcript deep-read: tools, files, PR, errors, timeline |
+| `set_tint` (id, color) | tag a session with a colored pip |
+| `set_note` (id, note) | attach a one-line note shown under the summary |
+| `clear_tint` (id) / `clear_note` (id) | remove an annotation |
+
+`tend mcp` is a local stdio server — no outbound network, no telemetry. Writes only touch small annotation files under `~/.claude/tend-color/` and `~/.claude/tend-note/`; session data is never modified. The `tend` Claude Code skill (in [`skill/`](skill/)) wraps these tools so an agent can check on sibling sessions and annotate them from inside a conversation.
+
 ## Session tints
 
 tend renders a small colored pip (`●`) before a session's name when that
@@ -188,6 +220,16 @@ stale tints don't accumulate.
 The first writer is the [`tend-color`](https://github.com/MattRice12/tend-color)
 extension, which exposes a `↑/↓` picker via the action menu. Any other tool
 that drops the same file works identically.
+
+## Session notes
+
+tend also reads a one-line text note per session and renders it in the dashboard under the summary. The convention mirrors tints:
+
+| Path | Contents |
+| --- | --- |
+| `~/.claude/tend-note/<session-id>` | A single short line of text. Missing or empty file = no note. |
+
+tend garbage-collects entries whose session id is no longer present, just like tints. The easiest writer is the `set_note` tool on [`tend mcp`](#mcp-server).
 
 ## Session digest
 
