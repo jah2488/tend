@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tend · keep every Claude Code session in view</title>
+<meta name="description" content="A small terminal UI that keeps your Claude Code sessions in view: which are working, which need you, which are done. Read-only. No network, no config, no telemetry.">
+<meta property="og:title" content="tend &#183; keep every Claude Code session in view">
+<meta property="og:description" content="A small terminal UI that keeps your Claude Code sessions in view: which are working, which need you, which are done. Read-only. No network, no config, no telemetry.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://tend-tui.netlify.app">
+<meta property="og:image" content="https://tend-tui.netlify.app/assets/tend-digest.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="tend &#183; keep every Claude Code session in view">
+<meta name="twitter:description" content="A small terminal UI that keeps your Claude Code sessions in view: which are working, which need you, which are done.">
+<meta name="twitter:image" content="https://tend-tui.netlify.app/assets/tend-digest.png">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='8' cy='8' r='5' fill='%2356B6C2'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&family=Martian+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<!-- ============ NAV ============ -->
+<header class="nav">
+  <a class="wordmark" href="#top"><span class="pip pip-working"></span>tend</a>
+  <nav class="nav-links">
+    <a href="#watch">what it shows</a>
+    <a href="#digest">digest</a>
+    <a href="#worktrees">worktrees</a>
+    <a href="#privacy">privacy</a>
+    <a href="#extend">extensions</a>
+    <a href="#install">install</a>
+    <a class="github-link" href="https://github.com/jah2488/tend">github</a>
+  </nav>
+</header>
+
+<main id="top">
+
+<!-- ============ HERO ============ -->
+<section class="hero">
+  <div class="hero-inner">
+    <div class="hero-copy">
+      <p class="eyebrow eyebrow-cyan">watch every claude code session at once</p>
+
+      <div class="pip-row" aria-hidden="true">
+        <span class="pip-cell"><span class="pip pip-working"></span><span class="pip-label">working</span></span>
+        <span class="pip-cell"><span class="pip pip-needsyou pulse"></span><span class="pip-label">needs you</span></span>
+        <span class="pip-cell"><span class="pip pip-idle"></span><span class="pip-label">idle</span></span>
+        <span class="pip-cell"><span class="pip pip-done"></span><span class="pip-label">done</span></span>
+        <span class="pip-cell"><span class="pip pip-stale"></span><span class="pip-label">stale</span></span>
+        <span class="pip-cell"><span class="pip pip-error"></span><span class="pip-label">error</span></span>
+      </div>
+
+      <h1>keep every Claude Code session in view.</h1>
+      <p class="subhead">You run several at once. Terminal, editor, SDK. <code>tend</code> watches them all and shows a live list: which are working, which need you, which are done.</p>
+
+      <div class="terminal install-block">
+        <div class="term-bar"><span class="tl red"></span><span class="tl amber"></span><span class="tl green"></span><span class="term-title">install</span><button class="copy-btn" data-copy="curl -fsSL https://raw.githubusercontent.com/jah2488/tend/main/install.sh | bash"><span class="copy-label">copy</span></button></div>
+        <div class="term-body">
+          <code class="term-line"><span class="prompt">❯</span> curl -fsSL https://raw.githubusercontent.com/jah2488/tend/main/install.sh | bash</code>
+        </div>
+      </div>
+
+      <p class="inspect-line">Piping a script into a shell deserves a look first. <a href="https://github.com/jah2488/tend/blob/main/install.sh">Read it here.</a></p>
+
+      <ul class="pip-list pip-list-cyan">
+        <li>No network calls, ever</li>
+        <li>Binary checksum-verified, SHA-256</li>
+        <li>Reads <code>~/.claude</code> read-only; never edits your work</li>
+      </ul>
+    </div>
+
+    <!-- HERO MOCKUP: illustrative dashboard (the digest screenshot below is a real capture) -->
+    <div class="terminal hero-shot">
+      <div class="term-bar"><span class="tl red"></span><span class="tl amber"></span><span class="tl green"></span><span class="term-title">tend</span><span class="term-spacer"></span></div>
+      <div class="term-body tend-dash">
+        <div class="dash-head"><span class="dim">tend v1.2.0</span>&nbsp;&nbsp;<span class="bright">2 live</span> <span class="dim">·</span> <span class="amber">1 needs you</span> <span class="dim">·</span> <span class="dim">1 idle</span></div>
+
+        <!-- WORKING card -->
+        <div class="card card-working">
+          <span class="rule rule-breath"></span>
+          <div class="card-main">
+            <div class="card-row">
+              <span class="sg sg-spin" data-spin></span><span class="pip pip-purple"></span><span class="name">webapp-checkout</span>
+              <span class="card-right"><span class="cyan">▶ working</span> <span class="dim">· 41% cpu</span></span>
+            </div>
+            <div class="card-sum dim">refactor the stripe webhook handler to retry on 409</div>
+            <div class="card-meta"><span class="green">⎇ fix/stripe-webhooks</span> <span class="dim">⑂ checkout</span> <span class="dim">· claude-sonnet-4-6</span></div>
+            <div class="bar-row"><span class="bar"><span class="bar-fill" style="width:72%"></span></span><span class="bar-tail dim">142k tok · 12 tools · 3 web · Notion · Slack</span></div>
+          </div>
+        </div>
+
+        <!-- NEEDS YOU card -->
+        <div class="card card-needsyou">
+          <span class="rule rule-pulse"></span>
+          <div class="card-main">
+            <div class="card-row">
+              <span class="sg sg-diamond amber"></span><span class="pip pip-orange"></span><span class="name">docs-site</span>
+              <span class="card-right"><span class="amber bold">◆ needs you</span> <span class="dim">· permission prompt</span></span>
+            </div>
+            <div class="card-sum dim">waiting for approval to run a shell command</div>
+            <div class="card-meta"><span class="green">⎇ main</span> <span class="dim">· 08:14 in</span></div>
+            <div class="bar-row"><span class="bar"><span class="bar-fill amber-fill" style="width:48%"></span></span><span class="bar-tail dim">94k tok · 7 tools · 1 web</span></div>
+          </div>
+        </div>
+
+        <!-- DONE card -->
+        <div class="card card-done">
+          <span class="rule green-rule"></span>
+          <div class="card-main">
+            <div class="card-row">
+              <span class="sg green">✓</span><span class="pip"></span><span class="name">migrate-users</span>
+              <span class="card-right"><span class="green">done</span> <span class="dim">· opened #412</span></span>
+            </div>
+            <div class="card-sum dim">finished, 18 min ago</div>
+            <div class="card-meta"><span class="green">⎇ feat/user-migration</span> <span class="dim">· merged</span></div>
+          </div>
+        </div>
+
+        <!-- compact SDK rows -->
+        <div class="compact-row"><span class="dim">◦</span>&nbsp;<span class="name">sdk-indexer</span> <span class="badge">[Cursor · sdk]</span> <span class="dim">~/proj/search</span> <span class="green">⎇ index-v3</span> <span class="dim r">2.1m tok · idle 03:41</span></div>
+        <div class="compact-row"><span class="dim">◦</span>&nbsp;<span class="name">sdk-cron</span> <span class="badge">[SDK · sdk]</span> <span class="dim">~/proj/cron</span> <span class="green">⎇ scheduled</span> <span class="dim r">880k tok · idle 11:02</span></div>
+
+        <div class="dash-foot dim">[↑↓] move · [enter] actions · [tab] digest · [r] refresh · [q] quit</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ TRUST BAR ============ -->
+<section class="trustbar reveal">
+  <div class="trust-inner">
+    <span class="trust-item"><span class="pip pip-done"></span>no network</span>
+    <span class="trust-item"><span class="pip pip-idle"></span>no config</span>
+    <span class="trust-item"><span class="pip pip-working"></span>no telemetry</span>
+    <span class="trust-item"><span class="pip pip-stale"></span>MIT licensed</span>
+    <span class="trust-item"><span class="pip pip-purple"></span>Rust, single binary</span>
+  </div>
+</section>
+
+<!-- ============ PROBLEM ============ -->
+<section class="section problem reveal">
+  <p class="eyebrow eyebrow-amber">the cost of running agents in parallel</p>
+  <h2>Too many sessions, not enough screen.</h2>
+  <div class="prose">
+    <p>You fired off three Claude Code sessions this morning. One in a terminal, one inside your editor, one from the SDK.</p>
+    <p>Somewhere in there, one is blocked on a permission prompt. One is quietly churning through tokens. One finished an hour ago and you forgot to check.</p>
+    <p><code>tend</code> watches all of them and shows you one glanceable list, so you stop tab-hopping to find the one that needs you.</p>
+  </div>
+</section>
+
+<!-- ============ WATCH / DASHBOARD ============ -->
+<section id="watch" class="section watch reveal">
+  <p class="eyebrow eyebrow-cyan">watch</p>
+  <h2>A live list, one row per session.</h2>
+  <p class="lede">Every session shows its state, its latest message, its cost, and where it reached. When something is live, the row moves.</p>
+
+  <!-- STATE LEGEND -->
+  <div class="state-legend">
+    <div class="legend-cell"><span class="lg pip pip-working"></span><span class="lg-label">working</span></div>
+    <div class="legend-cell"><span class="lg pip pip-needsyou pulse"></span><span class="lg-label">needs you</span></div>
+    <div class="legend-cell"><span class="lg pip pip-idle"></span><span class="lg-label">idle</span></div>
+    <div class="legend-cell"><span class="lg pip pip-done"></span><span class="lg-label">done</span></div>
+    <div class="legend-cell"><span class="lg pip pip-stale"></span><span class="lg-label">stale</span></div>
+    <div class="legend-cell"><span class="lg pip pip-error"></span><span class="lg-label">error</span></div>
+  </div>
+
+  <!-- FEATURE GRID -->
+  <div class="feature-grid">
+    <div class="feature-card">
+      <div class="fc-head"><span class="fc-glyph cyan">❯</span><h3>State</h3></div>
+      <p>Six color-coded states, animated when live. A working session spins; one that needs you pulses.</p>
+    </div>
+    <div class="feature-card">
+      <div class="fc-head"><span class="fc-glyph amber">✎</span><h3>What it's doing</h3></div>
+      <p>A one-line summary from the latest prompt or message, the current git branch, and any PR opened.</p>
+    </div>
+    <div class="feature-card">
+      <div class="fc-head"><span class="fc-glyph cyan">⌖</span><h3>Cost</h3></div>
+      <p>Total tokens, a context-fullness bar, and live CPU percent. See a session about to fill up.</p>
+    </div>
+    <div class="feature-card">
+      <div class="fc-head"><span class="fc-glyph dim-glyph">◦</span><h3>Activity</h3></div>
+      <p>Tool calls and web requests made, plus which integrations it touched. Notion, Slack, the rest.</p>
+    </div>
+    <div class="feature-card">
+      <div class="fc-head"><span class="fc-glyph green">⑂</span><h3>Worktrees</h3></div>
+      <p>Sibling sessions in the same repo stay distinct. The worktree name sits right next to the branch.</p>
+    </div>
+    <div class="feature-card">
+      <div class="fc-head"><span class="fc-glyph purple">●</span><h3>Tints</h3></div>
+      <p>A colored pip you set, by a file convention any tool can write. "This one's mine", "priority", "blocked".</p>
+    </div>
+  </div>
+
+  <p class="aside">Terminal sessions get a full card. Editor and SDK sessions collapse to a one-liner, so background work never crowds what you care about.</p>
+</section>
+
+<!-- ============ DIGEST ============ -->
+<section id="digest" class="section digest reveal">
+  <p class="eyebrow eyebrow-amber">digest</p>
+  <h2>Press Tab. See what a session actually did.</h2>
+  <p class="lede">A read-only, scrollable account of what one session spent its time on, pulled fresh from its transcript the moment you open it.</p>
+
+  <div class="digest-frame terminal">
+    <div class="term-bar"><span class="tl red"></span><span class="tl amber"></span><span class="tl green"></span><span class="term-title">digest · webapp-checkout</span><span class="term-spacer"></span></div>
+    <div class="term-body digest-img-wrap">
+      <img class="digest-img" src="assets/tend-digest.png" alt="The tend session digest panel: cost, prompts, a tool histogram, MCP resources, files, outcomes, and a full timeline.">
+    </div>
+  </div>
+
+  <div class="digest-cols">
+    <div class="digest-col">
+      <ul class="pip-list pip-list-amber">
+        <li><b>Cost</b>: total tokens, context fullness, wall-clock span</li>
+        <li><b>Asked / Latest</b>: the first prompt and the most recent</li>
+        <li><b>Tools</b>: a histogram by frequency. MCP collapses to Server·method (e.g. Notion·notion-fetch)</li>
+        <li><b>Resources</b>: MCP integrations touched, with counts, plus web</li>
+      </ul>
+    </div>
+    <div class="digest-col">
+      <ul class="pip-list pip-list-amber">
+        <li><b>Files</b>: changed (listed) versus read (counted)</li>
+        <li><b>Outcomes</b>: any PR opened, and how many errors it hit</li>
+        <li><b>Timeline</b>: a time-stamped feed of prompts, every tool call (read, edit, shell, web), PRs, and errors, read by glyph. Long sessions keep the most recent 1500</li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- glyph key -->
+  <div class="glyph-key reveal">
+    <span class="gk-item"><span class="g blue">❯</span> prompt</span>
+    <span class="gk-item"><span class="g green">⎇</span> PR</span>
+    <span class="gk-item"><span class="g amber">✎</span> edit</span>
+    <span class="gk-item"><span class="g green">$</span> shell</span>
+    <span class="gk-item"><span class="g cyan">⌖</span> web</span>
+    <span class="gk-item"><span class="g dim-glyph">▸</span> read</span>
+    <span class="gk-item"><span class="g red">✕</span> error</span>
+    <span class="gk-item"><span class="g dim-glyph">◦</span> tool</span>
+  </div>
+</section>
+
+<!-- ============ WORKTREES ============ -->
+<section id="worktrees" class="section worktrees reveal">
+  <div class="two-col">
+    <div>
+      <p class="eyebrow eyebrow-cyan">worktrees</p>
+      <h2>Tell sibling sessions apart.</h2>
+      <p class="lede">When you run parallel sessions across git worktrees in the same repo, tend shows the worktree name right next to the branch, marked with a branching glyph. So three sessions on three worktrees stay distinct, not three identical rows.</p>
+    </div>
+    <div class="terminal mini-shot">
+      <div class="term-bar"><span class="tl red"></span><span class="tl amber"></span><span class="tl green"></span><span class="term-title">tend</span><span class="term-spacer"></span></div>
+      <div class="term-body tend-dash">
+        <div class="card card-working compact">
+          <span class="rule rule-breath"></span>
+          <div class="card-main">
+            <div class="card-row"><span class="sg sg-spin cyan" data-spin></span><span class="pip pip-blue"></span><span class="name">api-refactor</span></div>
+            <div class="card-meta"><span class="green">⎇ CO-5390/relocate</span> <span class="dim">⑂ CO-5390-relocate</span></div>
+          </div>
+        </div>
+        <div class="card card-needsyou compact">
+          <span class="rule rule-pulse"></span>
+          <div class="card-main">
+            <div class="card-row"><span class="sg sg-diamond amber"></span><span class="pip pip-orange"></span><span class="name">api-tests</span></div>
+            <div class="card-meta"><span class="green">⎇ CO-5390/tests</span> <span class="dim">⑂ CO-5390-tests</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ COST ============ -->
+<section class="section cost reveal">
+  <div class="two-col reverse">
+    <div>
+      <p class="eyebrow eyebrow-cyan">cost</p>
+      <h2>Know what each session costs.</h2>
+      <p class="lede">Every row shows total tokens, a context-fullness bar so you can see a session about to fill up, and live CPU percent. The digest rounds it out with the wall-clock span.</p>
+      <p class="aside">No estimation, no sampling. The numbers come straight from the transcript tend already reads.</p>
+    </div>
+    <div class="cost-bars">
+      <div class="cost-row"><span class="cost-label">webapp-checkout</span><span class="bar big-bar"><span class="bar-fill" style="width:72%"></span></span><span class="cost-num">142k</span></div>
+      <div class="cost-row"><span class="cost-label">docs-site</span><span class="bar big-bar"><span class="bar-fill amber-fill" style="width:48%"></span></span><span class="cost-num">94k</span></div>
+      <div class="cost-row"><span class="cost-label">migrate-users</span><span class="bar big-bar"><span class="bar-fill green-fill" style="width:30%"></span></span><span class="cost-num">61k</span></div>
+      <div class="cost-row"><span class="cost-label">sdk-indexer</span><span class="bar big-bar"><span class="bar-fill" style="width:88%"></span></span><span class="cost-num">174k</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ PRIVACY ============ -->
+<section id="privacy" class="section privacy reveal">
+  <p class="eyebrow eyebrow-green">privacy</p>
+  <h2>Reads your sessions. Never edits them.</h2>
+  <p class="lede"><code>tend</code> reads the metadata Claude Code already writes under <code>~/.claude/</code> and parses it read-only. It checks whether each session's process is still alive to tell live work from finished work. It never edits a session or transcript, and never touches your repo. The proof is in the code.</p>
+  <div class="privacy-grid">
+    <ul class="pip-list pip-list-green">
+      <li>No network calls. Ever</li>
+      <li>No config file. No telemetry</li>
+      <li>Never edits a session or transcript file</li>
+      <li>The one thing it deletes: stale pip-color files under <code>~/.claude/tend-color/</code> once their session is gone</li>
+    </ul>
+    <ul class="pip-list pip-list-green">
+      <li>The binary is SHA-256 checksum-verified. The installer refuses on mismatch</li>
+      <li>No root. Installs to <code>~/.local/bin</code>. Runs nothing it downloads</li>
+      <li>Anything that changes your repo lives in extensions you choose, not in tend</li>
+    </ul>
+  </div>
+</section>
+
+<!-- ============ EXTEND ============ -->
+<section id="extend" class="section extend reveal">
+  <p class="eyebrow eyebrow-green">extend</p>
+  <h2>tend observes. Extensions act.</h2>
+  <p class="lede">A read-only core by design. <code>tend</code> will never commit, push, or touch the network itself. All the doing is opt-in, and yours. Find one, or write one. Both take about a minute.</p>
+
+  <div class="extend-grid">
+    <div class="extend-card">
+      <h3><span class="pip pip-done"></span>Find</h3>
+      <p>Any executable on your <code>PATH</code> named <code>tend-action-&lt;name&gt;</code> is discovered with no config file, shown in the action menu, and run against the session you select. The first one is <code>tend-ship</code> (commit and push a session's work).</p>
+      <code class="inline-cmd">tend --list-actions</code>
+    </div>
+    <div class="extend-card">
+      <h3><span class="pip pip-working"></span>Build</h3>
+      <p>Copy <code>examples/tend-action-example</code>, rename it <code>tend-action-&lt;name&gt;</code>, put it on your <code>PATH</code>, make it executable. It shows up in the menu next time you run tend.</p>
+      <code class="inline-cmd">cp examples/tend-action-example ~/.local/bin/tend-action-mine</code>
+    </div>
+  </div>
+
+  <div class="terminal code-block">
+    <div class="term-bar"><span class="tl red"></span><span class="tl amber"></span><span class="tl green"></span><span class="term-title">tend-action-example</span><span class="term-spacer"></span></div>
+    <div class="term-body">
+<pre class="code"><span class="c"># self-describe: one line of JSON on stdout, called once at startup</span>
+<span class="blue">$</span> tend-action-mine --tend-describe
+<span class="green">{"name": "Mine", "key": "M", "when": {"source": "terminal", "has_branch": true}}</span>
+
+<span class="c"># when invoked, tend leaves its TUI and hands the extension locators, not a snapshot</span>
+<span class="blue">TEND_SESSION_ID</span>=01HZK…   <span class="blue">TEND_TRANSCRIPT</span>=~/.claude/projects/…/01HZK….jsonl
+<span class="blue">TEND_PROJECT_DIR</span>=~/proj/webapp   <span class="blue">TEND_GIT_BRANCH</span>=fix/stripe-webhooks
+<span class="blue">TEND_WORKTREE</span>=checkout   <span class="blue">TEND_SOURCE</span>=terminal   <span class="blue">TEND_VERSION</span>=1.2.0</pre>
+    </div>
+  </div>
+
+  <ul class="pip-list pip-list-green extend-bullets">
+    <li><code>tend</code> never edits your sessions or repo. Extensions run with your own privileges</li>
+    <li>Extensions read fresh from disk via <code>TEND_*</code> locators, so they stay correct even when tend isn't running</li>
+    <li>Missing or malformed describe output is tolerated. The action still lists under its name</li>
+  </ul>
+
+  <div class="ext-gallery">
+    <p class="eyebrow eyebrow-green">already out there</p>
+    <div class="ext-cards">
+      <a class="ext-card" href="https://github.com/MattRice12/tend-ship">
+        <span class="ext-glyph green">&#8627;</span>
+        <span class="ext-name">tend-ship</span>
+        <span class="ext-desc">Commit and push a session's work. The first tend extension. Ships in the action menu as Ship.</span>
+        <span class="ext-link">github.com/MattRice12/tend-ship &#8594;</span>
+      </a>
+      <a class="ext-card" href="https://github.com/MattRice12/tend-color">
+        <span class="ext-glyph purple">&#9679;</span>
+        <span class="ext-name">tend-color</span>
+        <span class="ext-desc">Set a colored tint on a session. Adds a tint picker to the action menu that writes the pip file any tool can read.</span>
+        <span class="ext-link">github.com/MattRice12/tend-color &#8594;</span>
+      </a>
+    </div>
+  </div>
+</section>
+
+<!-- ============ INSTALL ============ -->
+<section id="install" class="section install reveal">
+  <p class="eyebrow eyebrow-cyan">install</p>
+  <h2>One line. No root. Installs to ~/.local/bin.</h2>
+
+  <div class="terminal install-final">
+    <div class="term-bar"><span class="tl red"></span><span class="tl amber"></span><span class="tl green"></span><span class="term-title">install</span><button class="copy-btn" data-copy="curl -fsSL https://raw.githubusercontent.com/jah2488/tend/main/install.sh | bash"><span class="copy-label">copy</span></button></div>
+    <div class="term-body">
+      <code class="term-line"><span class="prompt">❯</span> curl -fsSL https://raw.githubusercontent.com/jah2488/tend/main/install.sh | bash</code>
+    </div>
+  </div>
+
+  <ol class="install-steps">
+    <li><span class="step-num">01</span>The installer downloads the latest release binary, verifies its SHA-256 checksum (refuses on mismatch), and handles chmod and Gatekeeper</li>
+    <li><span class="step-num">02</span>Make sure <code>~/.local/bin</code> is on your <code>PATH</code>, then run <code>tend</code></li>
+    <li><span class="step-num">03</span><div class="step-body">Update an existing install:
+      <ol class="sub-steps">
+        <li><code>git pull</code></li>
+        <li><code>cargo install --path . --force</code></li>
+        <li>quit tend (<code>q</code>) and relaunch</li>
+      </ol>
+    </div></li>
+  </ol>
+
+  <p class="aside">A prebuilt binary ships for macOS on Apple Silicon. Other platforms build from source with a Rust toolchain: <code>git clone</code>, <code>cd tend</code>, <code>cargo install --path .</code></p>
+</section>
+
+<!-- ============ FOOTER ============ -->
+<footer class="footer">
+  <div class="footer-inner">
+    <div class="footer-brand">
+      <span class="wordmark"><span class="pip pip-working"></span>tend</span>
+      <span class="footer-tag dim">reads your Claude Code sessions, never edits them</span>
+    </div>
+    <div class="footer-links">
+      <a href="https://github.com/jah2488/tend">github.com/jah2488/tend</a>
+      <a href="https://github.com/jah2488/tend/blob/main/install.sh">install.sh</a>
+      <a href="https://github.com/jah2488/tend/blob/main/LICENSE">MIT licensed</a>
+    </div>
+  </div>
+  <p class="footer-note dim">written in Rust, single binary, no runtime to install. <code class="inline-cmd">curl -fsSL https://raw.githubusercontent.com/jah2488/tend/main/install.sh | bash</code></p>
+</footer>
+
+</main>
+<script src="script.js"></script>
+</body>
+</html>

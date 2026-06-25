@@ -2,6 +2,8 @@
 
 A small terminal UI that keeps your [Claude Code](https://claude.com/claude-code) sessions in view — which are **working**, which **need you**, and which are **done**.
 
+**Website:** <https://tend-tui.netlify.app>
+
 If you run several Claude Code sessions at once (terminal, editor, SDK), it's easy to lose track of which one is blocked on a permission prompt and which is quietly churning. `tend` watches them all and shows a live, glanceable list.
 
 ## What it shows
@@ -110,7 +112,7 @@ In the action menu: `↑`/`↓` to choose, `Enter` (or an action's own key) to r
 `tend` observes; extensions act. An extension is any executable on your `PATH` named
 `tend-action-<name>`. tend discovers it automatically (no config file), shows it in the action
 menu, and runs it against the selected session. The first action shipped this way is
-[`tend-ship`](https://github.com/) — commit and push a session's work.
+[`tend-ship`](https://github.com/MattRice12/tend-ship) — commit and push a session's work.
 
 tend stays a read-only observer: it never commits, pushes, or touches the network itself. An
 extension runs as a normal subprocess with *your* privileges and is responsible for whatever
