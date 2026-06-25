@@ -10,7 +10,7 @@
 //! This keeps tend's promises intact: tend-the-binary still makes no network calls and
 //! holds no config. Extensions are the user's own opt-in and run with their privileges.
 
-use crate::model::{Session, Source, State};
+use crate::model::Session;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -54,32 +54,12 @@ pub struct When {
     state: Option<String>,
 }
 
-/// Stable slug for a lifecycle state, used by `When.state` matching.
-fn state_slug(state: State) -> &'static str {
-    match state {
-        State::Working => "working",
-        State::NeedsYou => "needs-you",
-        State::Idle => "idle",
-        State::Done => "done",
-        State::Stale => "stale",
-        State::Error => "error",
-    }
-}
-
-/// Slug for a session's source, used by `When.source` matching and the `TEND_SOURCE` env.
-fn source_slug(source: Source) -> &'static str {
-    match source {
-        Source::Terminal => "terminal",
-        _ => "sdk",
-    }
-}
-
 impl Action {
     /// Whether this action should be offered for `s`.
     pub fn applicable(&self, s: &Session) -> bool {
         let Some(w) = &self.when else { return true };
         if let Some(src) = &w.source {
-            if !src.eq_ignore_ascii_case(source_slug(s.source)) {
+            if !src.eq_ignore_ascii_case(s.source.slug()) {
                 return false;
             }
         }
@@ -89,7 +69,7 @@ impl Action {
             }
         }
         if let Some(st) = &w.state {
-            if !st.eq_ignore_ascii_case(state_slug(s.state)) {
+            if !st.eq_ignore_ascii_case(s.state.slug()) {
                 return false;
             }
         }
@@ -113,7 +93,7 @@ impl Action {
             .env("TEND_SESSION_ID", &s.session_id)
             .env("TEND_PROJECT_DIR", &s.cwd)
             .env("TEND_SESSION_NAME", &s.name)
-            .env("TEND_SOURCE", source_slug(s.source));
+            .env("TEND_SOURCE", s.source.slug());
         if let Some(p) = &s.transcript_path {
             cmd.env("TEND_TRANSCRIPT", p);
         }

@@ -1,7 +1,9 @@
 mod actions;
 mod discovery;
 mod model;
+mod mcp;
 mod note;
+mod store;
 mod summarize;
 mod tint;
 mod transcript;
@@ -36,6 +38,7 @@ fn print_usage(out: impl std::io::Write) {
          \x20   --list              print parsed sessions as text and exit\n\
          \x20   --list-actions      print discovered tend-action-* extensions and exit\n\
          \x20   --digest [ID|NAME]  print one session's digest as text and exit\n\
+         \x20   mcp                  run the MCP server over stdio (for Claude / MCP clients)\n\
          \x20   -h, --help          show this help and exit\n\
          \x20   -V, --version       show version and exit\n",
         env!("CARGO_PKG_VERSION"),
@@ -200,6 +203,13 @@ fn main() -> Result<()> {
             );
         }
         return Ok(());
+    }
+
+    // `tend mcp` speaks the Model Context Protocol over stdio, so another client
+    // (e.g. a Claude Code session via the tend skill) can query sessions and
+    // annotate them with tints/notes. A non-interactive text mode, like --list.
+    if std::env::args().any(|a| a == "mcp") {
+        return mcp::serve();
     }
 
     // `tend --list-actions` prints the discovered extensions and exits — lets extension

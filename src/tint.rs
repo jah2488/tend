@@ -57,6 +57,19 @@ impl Tint {
             Tint::Gray => Color::Rgb(0x5C, 0x63, 0x70),
         }
     }
+
+    /// Inverse of `parse`: the lowercase on-disk name. Used by writers.
+    pub fn name(self) -> &'static str {
+        match self {
+            Tint::Red => "red",
+            Tint::Orange => "orange",
+            Tint::Yellow => "yellow",
+            Tint::Green => "green",
+            Tint::Blue => "blue",
+            Tint::Purple => "purple",
+            Tint::Gray => "gray",
+        }
+    }
 }
 
 /// Path to the tint directory: `~/.claude/tend-color/`. Not created here —
@@ -98,6 +111,25 @@ pub fn gc(current_ids: &HashSet<String>) {
         if !current_ids.contains(name) {
             let _ = std::fs::remove_file(&path);
         }
+    }
+}
+
+/// Write the tint for a session, atomically (tmp + rename) so a crash mid-write
+/// leaves no partial file (gc sweeps any `.tmp` orphan). Producer side, used by
+/// `tend mcp`. `InvalidInput` for an unknown color or unsafe id; `NotFound` if
+/// HOME is unset.
+pub fn write_for(session_id: &str, color: &str) -> std::io::Result<()> {
+    let t = Tint::parse(color)
+        .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::InvalidInput, "unknown color"))?;
+    let dir = dir().ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "HOME unset"))?;
+    crate::store::write_at(&dir, session_id, t.name())
+}
+
+/// Remove the tint for a session. A missing file is not an error.
+pub fn clear_for(session_id: &str) -> std::io::Result<()> {
+    match dir() {
+        Some(dir) => crate::store::remove_at(&dir, session_id),
+        None => Ok(()),
     }
 }
 

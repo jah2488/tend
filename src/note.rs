@@ -9,6 +9,9 @@
 use std::collections::HashSet;
 use std::path::PathBuf;
 
+/// Maximum note length tend will store or render; keeps the card to one line.
+pub const MAX_LEN: usize = 120;
+
 /// Path to the note directory: `~/.claude/tend-note/`. Not created by the
 /// consumer side — "missing dir = nobody's using notes, nothing to do."
 pub fn dir() -> Option<PathBuf> {
@@ -45,5 +48,27 @@ pub fn gc(current_ids: &HashSet<String>) {
         if !current_ids.contains(name) {
             let _ = std::fs::remove_file(&path);
         }
+    }
+}
+
+/// Write the note for a session, atomically. Newlines become spaces and the
+/// text is trimmed and capped to `MAX_LEN` so the file is one short line; an
+/// empty note clears it instead. Producer side, used by `tend mcp`.
+pub fn write_for(session_id: &str, text: &str) -> std::io::Result<()> {
+    let one_line = text.replace(['\n', '\r'], " ");
+    let one_line = one_line.trim();
+    if one_line.is_empty() {
+        return clear_for(session_id);
+    }
+    let capped: String = one_line.chars().take(MAX_LEN).collect();
+    let dir = dir().ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "HOME unset"))?;
+    crate::store::write_at(&dir, session_id, &capped)
+}
+
+/// Remove the note for a session. A missing file is not an error.
+pub fn clear_for(session_id: &str) -> std::io::Result<()> {
+    match dir() {
+        Some(dir) => crate::store::remove_at(&dir, session_id),
+        None => Ok(()),
     }
 }

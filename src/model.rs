@@ -37,6 +37,19 @@ impl State {
         }
     }
 
+    /// Stable lowercase slug for JSON outputs (`tend mcp`) and the extension
+    /// `when.state` filter. The single source of truth for the spelling.
+    pub fn slug(self) -> &'static str {
+        match self {
+            State::Working => "working",
+            State::NeedsYou => "needs-you",
+            State::Idle => "idle",
+            State::Done => "done",
+            State::Stale => "stale",
+            State::Error => "error",
+        }
+    }
+
     /// Trailing status glyph (the animated spinner is handled separately for Working).
     pub fn glyph(self) -> &'static str {
         match self {
@@ -73,6 +86,15 @@ impl Source {
         match self {
             Source::Sdk => Some("sdk"),
             _ => None,
+        }
+    }
+
+    /// Stable lowercase slug for JSON outputs and the `TEND_SOURCE` env var.
+    pub fn slug(self) -> &'static str {
+        match self {
+            Source::Terminal => "terminal",
+            Source::Sdk => "sdk",
+            Source::Desktop => "desktop",
         }
     }
 }
