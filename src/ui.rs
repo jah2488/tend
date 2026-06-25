@@ -447,6 +447,17 @@ fn session_item(s: &Session, tick: u64, width: usize, now_offset_ms: i64) -> Lis
         ]));
     }
 
+    // ── user note (set via `tend mcp` / skill), shown distinct from the auto summary
+    if let Some(note) = &s.note {
+        lines.push(Line::from(vec![
+            rule_span(s.state, tick),
+            Span::styled(
+                format!("\u{2756} {}", trunc(note, inner)),
+                Style::default().fg(Color::Rgb(0xE5, 0xC0, 0x7B)),
+            ),
+        ]));
+    }
+
     // ── context bar + integrations
     let filled = ((s.context_tokens as f32 / CONTEXT_LIMIT) * BAR_W as f32)
         .round()
@@ -897,6 +908,7 @@ mod tests {
             active_span_ms: None,
             cpu_pct: cpu,
             tint: None,
+            note: None,
         }
     }
 

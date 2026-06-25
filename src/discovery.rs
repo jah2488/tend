@@ -1,4 +1,5 @@
 use crate::model::{Session, Source, State};
+use crate::note;
 use crate::summarize::Summarizer;
 use crate::tint;
 use crate::transcript;
@@ -344,6 +345,7 @@ pub fn load_sessions(summarizer: &dyn Summarizer) -> Result<Vec<Session>> {
         });
 
         let tint = tint::read_for(&f.session_id);
+        let note = note::read_for(&f.session_id);
 
         let mut session = Session {
             session_id: f.session_id.clone(),
@@ -369,6 +371,7 @@ pub fn load_sessions(summarizer: &dyn Summarizer) -> Result<Vec<Session>> {
             active_span_ms: analysis.active_span_ms,
             cpu_pct,
             tint,
+            note,
         };
 
         session.summary = summarizer.summarize(&session, &analysis);
@@ -381,6 +384,7 @@ pub fn load_sessions(summarizer: &dyn Summarizer) -> Result<Vec<Session>> {
     if !sessions.is_empty() {
         let ids: HashSet<String> = sessions.iter().map(|s| s.session_id.clone()).collect();
         tint::gc(&ids);
+        note::gc(&ids);
     }
 
     // Interactive sessions first, then the SDK mini-list. Within each group: by state

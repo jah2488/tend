@@ -1,6 +1,7 @@
 mod actions;
 mod discovery;
 mod model;
+mod note;
 mod summarize;
 mod tint;
 mod transcript;

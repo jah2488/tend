@@ -125,4 +125,8 @@ pub struct Session {
     /// `tend-color` (or any writer of the `~/.claude/tend-color/<id>` file).
     /// `None` = no pip; column space is still reserved for layout.
     pub tint: Option<Tint>,
+    /// User-chosen one-line note, distinct from the auto-derived `summary`.
+    /// Set by `tend mcp` (or any writer of the `~/.claude/tend-note/<id>`
+    /// file). `None` = no note line drawn.
+    pub note: Option<String>,
 }

@@ -269,6 +269,7 @@ mod tests {
             active_span_ms: None,
             cpu_pct: None,
             tint: None,
+            note: None,
         }
     }
 
