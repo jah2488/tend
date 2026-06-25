@@ -76,7 +76,7 @@
     <div class="terminal hero-shot">
       <div class="term-bar"><span class="tl red"></span><span class="tl amber"></span><span class="tl green"></span><span class="term-title">tend</span><span class="term-spacer"></span></div>
       <div class="term-body tend-dash">
-        <div class="dash-head"><span class="dim">tend v1.2.0</span>&nbsp;&nbsp;<span class="bright">2 live</span> <span class="dim">·</span> <span class="amber">1 needs you</span> <span class="dim">·</span> <span class="dim">1 idle</span></div>
+        <div class="dash-head"><span class="dim">tend v1.3.0</span>&nbsp;&nbsp;<span class="bright">2 live</span> <span class="dim">·</span> <span class="amber">1 needs you</span> <span class="dim">·</span> <span class="dim">1 idle</span></div>
 
         <!-- WORKING card -->
         <div class="card card-working">
@@ -193,6 +193,10 @@
       <div class="fc-head"><span class="fc-glyph purple">●</span><h3>Tints</h3></div>
       <p>A colored pip you set, by a file convention any tool can write. "This one's mine", "priority", "blocked".</p>
     </div>
+    <div class="feature-card">
+      <div class="fc-head"><span class="fc-glyph amber">&#10022;</span><h3>Notes</h3></div>
+      <p>A short line under the summary, by the same file convention. "Blocked on review", "do not merge". Set a tint or a note from any tool, or from <code>tend mcp</code>.</p>
+    </div>
   </div>
 
   <p class="aside">Terminal sessions get a full card. Editor and SDK sessions collapse to a one-liner, so background work never crowds what you care about.</p>
@@ -300,7 +304,7 @@
       <li>No network calls. Ever</li>
       <li>No config file. No telemetry</li>
       <li>Never edits a session or transcript file</li>
-      <li>The one thing it deletes: stale pip-color files under <code>~/.claude/tend-color/</code> once their session is gone</li>
+      <li>The one thing it deletes: stale annotation files under <code>~/.claude/tend-color/</code> and <code>~/.claude/tend-note/</code> once their session is gone</li>
     </ul>
     <ul class="pip-list pip-list-green">
       <li>The binary is SHA-256 checksum-verified. The installer refuses on mismatch</li>
@@ -327,6 +331,11 @@
       <p>Copy <code>examples/tend-action-example</code>, rename it <code>tend-action-&lt;name&gt;</code>, put it on your <code>PATH</code>, make it executable. It shows up in the menu next time you run tend.</p>
       <code class="inline-cmd">cp examples/tend-action-example ~/.local/bin/tend-action-mine</code>
     </div>
+    <div class="extend-card">
+      <h3><span class="pip pip-needsyou"></span>Automate</h3>
+      <p><code>tend mcp</code> speaks the Model Context Protocol over stdio, so another agent or script can read session state and annotate it with tints or notes. Opt-in and local — no outbound network, and sessions and transcripts stay untouched.</p>
+      <code class="inline-cmd">claude mcp add tend -- tend mcp</code>
+    </div>
   </div>
 
   <div class="terminal code-block">
@@ -339,7 +348,7 @@
 <span class="c"># when invoked, tend leaves its TUI and hands the extension locators, not a snapshot</span>
 <span class="blue">TEND_SESSION_ID</span>=01HZK…   <span class="blue">TEND_TRANSCRIPT</span>=~/.claude/projects/…/01HZK….jsonl
 <span class="blue">TEND_PROJECT_DIR</span>=~/proj/webapp   <span class="blue">TEND_GIT_BRANCH</span>=fix/stripe-webhooks
-<span class="blue">TEND_WORKTREE</span>=checkout   <span class="blue">TEND_SOURCE</span>=terminal   <span class="blue">TEND_VERSION</span>=1.2.0</pre>
+<span class="blue">TEND_WORKTREE</span>=checkout   <span class="blue">TEND_SOURCE</span>=terminal   <span class="blue">TEND_VERSION</span>=1.3.0</pre>
     </div>
   </div>
 

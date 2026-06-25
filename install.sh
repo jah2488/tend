@@ -85,6 +85,16 @@ fi
 mkdir -p "$INSTALL_DIR"
 mv -f "${tmp}/${asset}" "${INSTALL_DIR}/${BIN}"
 
+# macOS can SIGKILL a freshly-replaced binary whose ad-hoc signature no longer
+# matches the one it approved at this path (com.apple.provenance), bricking an
+# in-place update. Clear tracking xattrs and re-sign ad-hoc so updates run clean.
+# Best-effort: a machine without codesign keeps the linker signature, which is
+# fine for a first install to a fresh path.
+if [ "$os" = "Darwin" ]; then
+  xattr -c "${INSTALL_DIR}/${BIN}" >/dev/null 2>&1 || true
+  codesign --force --sign - "${INSTALL_DIR}/${BIN}" >/dev/null 2>&1 || true
+fi
+
 info "Installed ${INSTALL_DIR}/${BIN}"
 case ":${PATH}:" in
   *":${INSTALL_DIR}:"*)
